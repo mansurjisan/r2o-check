@@ -64,17 +64,30 @@ class TestRepoTypeFiltering:
         results = runner.run()
         assert len(results) == 0
 
-    def test_library_repo_gets_zero_results(self) -> None:
+    def test_library_repo_gets_only_build_rules(self) -> None:
+        """Library repos only get build rules."""
         c = Config(repo_type=RepoType.LIBRARY)
         runner = LintRunner(COMPLIANT, c)
         results = runner.run()
-        assert len(results) == 0
+        rule_ids = {r.rule_id for r in results}
+        # Only build rules apply.
+        assert all(
+            rid.startswith("R2OBLD") for rid in rule_ids
+        )
 
-    def test_model_source_gets_zero_results(self) -> None:
+    def test_model_source_gets_build_and_module_rules(
+        self,
+    ) -> None:
+        """Model source repos get build + module rules."""
         c = Config(repo_type=RepoType.MODEL_SOURCE)
         runner = LintRunner(COMPLIANT, c)
         results = runner.run()
-        assert len(results) == 0
+        rule_ids = {r.rule_id for r in results}
+        # Only build and module rules apply.
+        assert all(
+            rid.startswith(("R2OBLD", "R2OMOD"))
+            for rid in rule_ids
+        )
 
     def test_operational_model_gets_all_rules(self) -> None:
         c = Config(repo_type=RepoType.OPERATIONAL_MODEL)

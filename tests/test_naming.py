@@ -1,4 +1,4 @@
-"""Tests for naming convention rules (R2ONAM001–R2ONAM004)."""
+"""Tests for naming convention rules (R2ONAM001–R2ONAM005)."""
 
 from __future__ import annotations
 
@@ -12,12 +12,14 @@ from r2o_check.rules.naming import (
     check_exscript_naming,
     check_jjob_naming,
     check_modulefile_naming,
+    check_ush_naming,
     check_version_files,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
 RRFS = FIXTURES / "rrfs_style"
 STOFS = FIXTURES / "stofs_style"
+STOFS_NESTED = FIXTURES / "stofs_nested"
 BAD = FIXTURES / "bad_naming"
 COMPLIANT = FIXTURES / "compliant_minimal"
 
@@ -88,12 +90,15 @@ class TestExscriptNaming:
         assert len(results) == 3
         assert all(r.status == Status.PASS for r in results)
 
-    def test_bad_exscripts_all_fail(
+    def test_bad_exscripts_fail(
         self, config: Config
     ) -> None:
+        """Only files starting with 'ex' are checked."""
         results = check_exscript_naming(BAD, config)
-        assert len(results) == 3
-        assert all(r.status == Status.FAIL for r in results)
+        # Only exmodel_task.txt starts with 'ex'
+        assert len(results) == 1
+        assert results[0].status == Status.FAIL
+        assert "exmodel_task.txt" in results[0].message
 
     def test_no_scripts_dir_returns_empty(
         self, tmp_path: Path, config: Config
@@ -201,6 +206,74 @@ class TestNamingIntegration:
             if r.rule_id.startswith("R2ONAM")
             and r.status == Status.FAIL
         ]
-        # 3 bad J-jobs + 3 bad ex-scripts + 2 bad modulefiles
-        # + 1 missing build.ver = 9+
-        assert len(naming_fails) >= 9
+        # 3 bad J-jobs + 2 bad modulefiles
+        # + 1 missing build.ver = 6+
+        # (bad ex-scripts don't start with 'ex' so not flagged
+        # by the recursive rule — except exmodel_task.txt)
+        assert len(naming_fails) >= 6
+
+
+# ── R2ONAM002: Recursive ex-script naming ─────────────────────
+
+
+class TestExscriptRecursion:
+    def test_stofs_nested_finds_exscripts(
+        self, config: Config
+    ) -> None:
+        """Recurse into scripts/stofs_2d_glo/."""
+        results = check_exscript_naming(STOFS_NESTED, config)
+        # 2 compliant + 1 bad (exstofs_badname)
+        assert len(results) == 3
+
+    def test_stofs_nested_compliant_pass(
+        self, config: Config
+    ) -> None:
+        results = check_exscript_naming(STOFS_NESTED, config)
+        passes = [r for r in results if r.status == Status.PASS]
+        assert len(passes) == 2
+
+    def test_stofs_nested_bad_name_fails(
+        self, config: Config
+    ) -> None:
+        results = check_exscript_naming(STOFS_NESTED, config)
+        fails = [r for r in results if r.status == Status.FAIL]
+        assert len(fails) == 1
+        assert "exstofs_badname" in fails[0].message
+
+    def test_helper_not_flagged(
+        self, config: Config
+    ) -> None:
+        """helper_utils.sh doesn't start with 'ex'."""
+        results = check_exscript_naming(STOFS_NESTED, config)
+        names = [
+            r.path.name for r in results  # type: ignore[union-attr]
+        ]
+        assert "helper_utils.sh" not in names
+
+
+# ── R2ONAM005: Ush script naming ──────────────────────────────
+
+
+class TestUshNaming:
+    def test_rrfs_ush_passes(self, config: Config) -> None:
+        results = check_ush_naming(RRFS, config)
+        assert len(results) == 1
+        assert results[0].status == Status.PASS
+
+    def test_bad_ush_scripts(self, config: Config) -> None:
+        results = check_ush_naming(BAD, config)
+        warns = [r for r in results if r.status == Status.WARN]
+        # ExBadUtil.sh (uppercase), exhelper.sh (starts with ex)
+        assert len(warns) == 2
+
+    def test_good_ush_passes(self, config: Config) -> None:
+        results = check_ush_naming(BAD, config)
+        passes = [r for r in results if r.status == Status.PASS]
+        assert len(passes) == 1
+        assert "good_util.sh" in passes[0].message
+
+    def test_no_ush_returns_empty(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        results = check_ush_naming(tmp_path, config)
+        assert results == []
