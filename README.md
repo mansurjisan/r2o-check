@@ -1,4 +1,5 @@
 <p align="center">
+  <img src="assets/logo.svg" alt="r2o-check logo" width="160">
   <h1 align="center">r2o-check</h1>
   <p align="center">
     <a href="https://github.com/mansurjisan/r2o-check/actions/workflows/ci.yml"><img src="https://github.com/mansurjisan/r2o-check/actions/workflows/ci.yml/badge.svg" alt="CI"></a>

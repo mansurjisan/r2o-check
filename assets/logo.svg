@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" role="img" aria-label="r2o-check logo">
+  <title>r2o-check</title>
+  <desc>A workflow DAG with a glowing repo folder, a workflow root node, and a pulsing green verification checkmark, with the r2o-check wordmark below.</desc>
+
+  <defs>
+    <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-color="#2563eb" flood-opacity="0.55"/>
+      <feComposite in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feFlood flood-color="#16a34a" flood-opacity="0.65"/>
+      <feComposite in2="blur" operator="in" result="glow"/>
+      <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <style>
+      .edge { stroke: #6b7280; stroke-width: 2.5; stroke-linecap: round; fill: none; }
+      .repo-fill { fill: #ffffff; stroke: #2563eb; stroke-width: 3; stroke-linejoin: round; }
+      .repo-line { stroke: #2563eb; stroke-width: 2.5; stroke-linecap: round; fill: none; }
+      .root-fill { fill: #ffffff; stroke: #2563eb; stroke-width: 2.5; }
+      .root-edge { stroke: #2563eb; stroke-width: 2; fill: none; }
+      .check-circle { fill: #ffffff; stroke: #16a34a; stroke-width: 3.5; }
+      .check-path { stroke: #16a34a; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .wordmark { font-family: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace; font-size: 34px; font-weight: 700; fill: #1f2937; letter-spacing: -0.5px; }
+
+      @media (prefers-color-scheme: dark) {
+        .repo-fill, .root-fill, .check-circle { fill: #0d1117; }
+        .wordmark { fill: #e5e7eb; }
+        .edge { stroke: #9ca3af; }
+      }
+
+      @keyframes pulse-glow {
+        0%, 100% { opacity: 0.55; transform: scale(1); }
+        50%      { opacity: 1;    transform: scale(1.12); }
+      }
+      @keyframes pulse-ring {
+        0%   { r: 28; opacity: 0.7; }
+        100% { r: 50; opacity: 0;   }
+      }
+      .check-group { filter: url(#glow-green); transform-box: fill-box; transform-origin: center; animation: pulse-glow 2.2s ease-in-out infinite; }
+      .pulse-ring  { fill: none; stroke: #16a34a; stroke-width: 2; animation: pulse-ring 2.2s ease-out infinite; }
+    </style>
+  </defs>
+
+  <!-- Edges from root down to each leaf -->
+  <line class="edge" x1="160" y1="96"  x2="108" y2="164"/>
+  <line class="edge" x1="160" y1="96"  x2="212" y2="164"/>
+
+  <!-- Root: small DAG glyph (parent square + two children + connectors), blue-glowing -->
+  <g filter="url(#glow-blue)">
+    <rect class="root-fill" x="150" y="56" width="20" height="20" rx="3"/>
+    <rect class="root-fill" x="132" y="82" width="16" height="16" rx="3"/>
+    <rect class="root-fill" x="172" y="82" width="16" height="16" rx="3"/>
+    <line class="root-edge" x1="160" y1="76" x2="140" y2="82"/>
+    <line class="root-edge" x1="160" y1="76" x2="180" y2="82"/>
+  </g>
+
+  <!-- Left leaf: folder icon, blue-glowing -->
+  <g filter="url(#glow-blue)" transform="translate(82, 138)">
+    <path class="repo-fill" d="M4 8 Q4 4 8 4 L22 4 L28 10 L48 10 Q52 10 52 14 L52 44 Q52 48 48 48 L8 48 Q4 48 4 44 Z"/>
+    <line class="repo-line" x1="16" y1="22" x2="40" y2="40"/>
+  </g>
+
+  <!-- Right leaf: green checkmark in circle, with pulsing glow + expanding ring -->
+  <circle class="pulse-ring" cx="212" cy="164" r="28"/>
+  <g class="check-group">
+    <circle class="check-circle" cx="212" cy="164" r="28"/>
+    <path class="check-path" d="M199 164 L209 174 L225 156"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text class="wordmark" x="160" y="286" text-anchor="middle">r2o-check</text>
+</svg>
