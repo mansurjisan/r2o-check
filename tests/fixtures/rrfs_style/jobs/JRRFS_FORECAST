@@ -1,0 +1,31 @@
+#!/bin/bash
+set -x
+export PS4='+ $SECONDS + '
+
+export NET="rrfs"
+export RUN="rrfs"
+
+export model_ver=${model_ver:-v1.0.0}
+export HOMErrfs=${HOMErrfs:-${PACKAGEROOT}/rrfs.${model_ver}}
+
+export USHrrfs=${USHrrfs:-${HOMErrfs}/ush}
+export EXECrrfs=${EXECrrfs:-${HOMErrfs}/exec}
+export PARMrrfs=${PARMrrfs:-${HOMErrfs}/parm}
+export FIXrrfs=${FIXrrfs:-${HOMErrfs}/fix}
+
+# Date/cycle setup
+export PDY=${PDY:-$(date +%Y%m%d)}
+export cycle=${cycle:-t00z}
+
+# Working directory
+export DATA=${DATA:-${DATAROOT}/${jobid}}
+mkdir -p $DATA
+cd $DATA
+
+# COM setup
+export COMIN=${COMIN:-$(compath.py ${envir}/${NET}/${model_ver}/${RUN}.${PDY})}
+export COMOUT=${COMOUT:-$(compath.py -o ${NET}/${model_ver}/${RUN}.${PDY})}
+mkdir -p $COMOUT
+
+# Execute
+${SCRIPTSrrfs}/exrrfs_forecast.sh
