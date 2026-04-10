@@ -211,6 +211,8 @@ def check_modulefile_naming(
     for f in sorted(mf_dir.rglob("*")):
         if not f.is_file():
             continue
+        if f.name.startswith("."):
+            continue
         if f.suffix == ".lua":
             results.append(LintResult(
                 status=Status.PASS,
