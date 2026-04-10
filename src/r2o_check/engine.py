@@ -130,6 +130,7 @@ RULE_MODULES: list[str] = [
     "r2o_check.rules.build",
     "r2o_check.rules.modules",
     "r2o_check.rules.versions",
+    "r2o_check.rules.ecflow",
 ]
 
 
