@@ -14,7 +14,6 @@ _STATUS_EMOJI = {
     Status.ERROR: "\U0001f534",
 }
 
-# Rule ID prefix -> category name.
 _CATEGORIES = {
     "R2OSTR": "Structure",
     "R2ONAM": "Naming",
@@ -24,6 +23,8 @@ _CATEGORIES = {
     "R2OVER": "Versions",
     "R2OECF": "ecFlow",
 }
+
+_MAX_CHARS = 60_000
 
 
 def _category(rule_id: str) -> str:
@@ -36,8 +37,15 @@ def _category(rule_id: str) -> str:
 def format_results_markdown(
     results: list[LintResult],
     config: Config,
+    *,
+    include_passes: bool = False,
 ) -> str:
-    """Format results as Markdown for PR comments."""
+    """Format results as Markdown for PR comments.
+
+    By default only FAIL/WARN results are shown; passes are
+    summarized as a count. Set include_passes=True for full.
+    Output is truncated at 60k characters with a footer.
+    """
     counts = {s: 0 for s in Status}
     for r in results:
         counts[r.status] += 1
@@ -61,42 +69,63 @@ def format_results_markdown(
     )
     lines.append("")
 
-    # Group by category.
-    by_cat: dict[str, list[LintResult]] = defaultdict(list)
-    for r in results:
-        by_cat[_category(r.rule_id)].append(r)
-
-    for cat_name in sorted(by_cat.keys()):
-        cat_results = by_cat[cat_name]
-        cat_fails = sum(
-            1 for r in cat_results
-            if r.status in (Status.FAIL, Status.ERROR)
-        )
-        cat_warns = sum(
-            1 for r in cat_results
-            if r.status == Status.WARN
-        )
-        icon = (
-            _STATUS_EMOJI[Status.FAIL] if cat_fails
-            else _STATUS_EMOJI[Status.WARN] if cat_warns
-            else _STATUS_EMOJI[Status.PASS]
-        )
-
+    if not include_passes and counts[Status.PASS] > 0:
         lines.append(
-            f"<details><summary>"
-            f"{icon} <b>{cat_name}</b>"
-            f" ({len(cat_results)} checks)"
-            f"</summary>\n"
+            f"{_STATUS_EMOJI[Status.PASS]}"
+            f" **{counts[Status.PASS]} rules passed**"
+            " (not shown)\n"
         )
-        lines.append("| Status | Rule | Message |")
-        lines.append("|---|---|---|")
-        for r in cat_results:
-            emoji = _STATUS_EMOJI[r.status]
-            msg = r.message.replace("|", "\\|")
-            lines.append(
-                f"| {emoji} | `{r.rule_id}` | {msg} |"
+
+    # Filter results to display.
+    if include_passes:
+        display = results
+    else:
+        display = [
+            r for r in results
+            if r.status != Status.PASS
+        ]
+
+    if not display and not include_passes:
+        lines.append(
+            "*All checks passed. No issues to display.*\n"
+        )
+    else:
+        # Group by category.
+        by_cat: dict[str, list[LintResult]] = defaultdict(list)
+        for r in display:
+            by_cat[_category(r.rule_id)].append(r)
+
+        for cat_name in sorted(by_cat.keys()):
+            cat_results = by_cat[cat_name]
+            cat_fails = sum(
+                1 for r in cat_results
+                if r.status in (Status.FAIL, Status.ERROR)
             )
-        lines.append("\n</details>\n")
+            cat_warns = sum(
+                1 for r in cat_results
+                if r.status == Status.WARN
+            )
+            icon = (
+                _STATUS_EMOJI[Status.FAIL] if cat_fails
+                else _STATUS_EMOJI[Status.WARN] if cat_warns
+                else _STATUS_EMOJI[Status.PASS]
+            )
+
+            lines.append(
+                f"<details open><summary>"
+                f"{icon} <b>{cat_name}</b>"
+                f" ({len(cat_results)} issues)"
+                f"</summary>\n"
+            )
+            lines.append("| Status | Rule | Message |")
+            lines.append("|---|---|---|")
+            for r in cat_results:
+                emoji = _STATUS_EMOJI[r.status]
+                msg = r.message.replace("|", "\\|")
+                lines.append(
+                    f"| {emoji} | `{r.rule_id}` | {msg} |"
+                )
+            lines.append("\n</details>\n")
 
     lines.append(
         "---\n"
@@ -104,4 +133,17 @@ def format_results_markdown(
         "(https://github.com/mansurjisan/r2o-check)"
         f" (repo_type: `{config.repo_type.value}`)*"
     )
-    return "\n".join(lines)
+
+    output = "\n".join(lines)
+
+    # Truncate if too long for PR comments.
+    if len(output) > _MAX_CHARS:
+        remaining = len(results) - len(display)
+        footer = (
+            f"\n\n... **{remaining} more results"
+            " truncated** — see JSON artifact for"
+            " full details."
+        )
+        output = output[: _MAX_CHARS - len(footer)] + footer
+
+    return output

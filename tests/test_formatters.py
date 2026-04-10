@@ -57,9 +57,17 @@ class TestMarkdownFormatter:
 
     def test_has_collapsible_sections(self) -> None:
         results, config = _sample_results()
-        md = format_results_markdown(results, config)
-        assert "<details>" in md
+        # Default mode hides passes; use include_passes
+        md = format_results_markdown(
+            results, config, include_passes=True
+        )
+        assert "<details" in md
         assert "</details>" in md
+
+    def test_default_hides_passes(self) -> None:
+        results, config = _sample_results()
+        md = format_results_markdown(results, config)
+        assert "rules passed" in md
 
     def test_has_footer(self) -> None:
         results, config = _sample_results()

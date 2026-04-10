@@ -43,7 +43,18 @@ def main() -> None:
     default=None,
     help="Write output to file instead of stdout.",
 )
-def lint(path: str, fmt: str, output_file: str | None) -> None:
+@click.option(
+    "--markdown-include-passes",
+    is_flag=True,
+    default=False,
+    help="Include passing rules in markdown output.",
+)
+def lint(
+    path: str,
+    fmt: str,
+    output_file: str | None,
+    markdown_include_passes: bool,
+) -> None:
     """Lint a repo for NCO Implementation Standards compliance."""
     repo_path = Path(path)
     config = load_config(repo_path)
@@ -59,7 +70,10 @@ def lint(path: str, fmt: str, output_file: str | None) -> None:
         text = format_results_json(results, config)
         _write_output(text, output_file)
     elif fmt == "markdown":
-        text = format_results_markdown(results, config)
+        text = format_results_markdown(
+            results, config,
+            include_passes=markdown_include_passes,
+        )
         _write_output(text, output_file)
     elif fmt == "html":
         text = format_results_html(results, config)
@@ -69,6 +83,64 @@ def lint(path: str, fmt: str, output_file: str | None) -> None:
         format_results(results, console)
 
     raise SystemExit(1 if has_failures else 0)
+
+
+@main.command()
+@click.argument(
+    "path",
+    type=click.Path(
+        exists=True, file_okay=False, resolve_path=True
+    ),
+)
+@click.option(
+    "--apply",
+    "apply_fixes",
+    is_flag=True,
+    default=False,
+    help="Apply fixes (default: dry-run only).",
+)
+def fix(path: str, apply_fixes: bool) -> None:
+    """Auto-fix safe, unambiguous rule violations."""
+    from r2o_check.fixers.structure import fix_missing_directories
+    from r2o_check.fixers.versions import fix_missing_version_files
+
+    repo_path = Path(path)
+    dry_run = not apply_fixes
+    mode = "DRY RUN" if dry_run else "APPLYING"
+
+    console = Console()
+    console.print(f"[bold]r2o-check fix ({mode})[/bold]\n")
+
+    actions = []
+    actions.extend(
+        fix_missing_directories(repo_path, dry_run=dry_run)
+    )
+    actions.extend(
+        fix_missing_version_files(repo_path, dry_run=dry_run)
+    )
+
+    if not actions:
+        console.print("[green]Nothing to fix![/green]")
+        return
+
+    for a in actions:
+        status = (
+            "[green]APPLIED[/green]" if a.applied
+            else "[yellow]WOULD FIX[/yellow]"
+        )
+        console.print(
+            f"  {status} {a.rule_id}: {a.description}"
+        )
+
+    console.print(
+        f"\n[bold]{len(actions)} fix(es)"
+        f" {'applied' if apply_fixes else 'proposed'}."
+        f"[/bold]"
+    )
+    if dry_run:
+        console.print(
+            "Run with --apply to apply fixes."
+        )
 
 
 def _write_output(text: str, output_file: str | None) -> None:

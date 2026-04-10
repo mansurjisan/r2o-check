@@ -35,18 +35,23 @@ runs:
       run: pip install "${{ github.action_path }}/.."
 
     - name: Run r2o-check (JSON)
-      id: lint-json
       shell: bash
       run: |
         r2o-check lint "${{ inputs.path }}" --format json \
           -o /tmp/r2o-check-results.json || true
 
     - name: Run r2o-check (Markdown)
-      id: lint-md
       shell: bash
       run: |
         r2o-check lint "${{ inputs.path }}" --format markdown \
           -o /tmp/r2o-check-results.md || true
+
+    - name: Upload JSON artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: r2o-check-results
+        path: /tmp/r2o-check-results.json
+        if-no-files-found: ignore
 
     - name: Run r2o-check (table)
       id: lint-table
@@ -72,12 +77,4 @@ runs:
 
     - name: Check result
       shell: bash
-      run: |
-        EXIT_CODE=${{ steps.lint-table.outputs.exit_code }}
-        if [ "${{ inputs.fail-on }}" = "warn" ]; then
-          # In strict mode, any non-zero exit is a failure
-          exit ${EXIT_CODE}
-        else
-          # Default: only fail on FAIL/ERROR (exit code 1)
-          exit ${EXIT_CODE}
-        fi
+      run: exit ${{ steps.lint-table.outputs.exit_code }}
