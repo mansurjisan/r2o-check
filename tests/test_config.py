@@ -138,3 +138,52 @@ def test_ecflow_key_accepted(tmp_path: Path) -> None:
     (tmp_path / ".r2o-check.yml").write_text("ecflow: {}\n")
     c = load_config(tmp_path)
     assert c.ecflow is not None
+
+
+# ── Severity overrides ────────────────────────────────────────
+
+
+def test_severity_overrides_default() -> None:
+    c = Config()
+    assert c.severity_overrides == {}
+
+
+def test_severity_overrides_parsed(tmp_path: Path) -> None:
+    (tmp_path / ".r2o-check.yml").write_text(
+        "severity_overrides:\n"
+        "  R2OSTR009: fail\n"
+        "  R2OENV001: warn\n"
+    )
+    c = load_config(tmp_path)
+    assert c.severity_overrides == {
+        "R2OSTR009": "fail",
+        "R2OENV001": "warn",
+    }
+
+
+def test_severity_overrides_invalid_value(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".r2o-check.yml").write_text(
+        "severity_overrides:\n  R2OSTR009: critical\n"
+    )
+    with pytest.raises(ValueError, match="must be one of"):
+        load_config(tmp_path)
+
+
+def test_severity_override_applied(tmp_path: Path) -> None:
+    """Override changes the result severity."""
+    from r2o_check.engine import LintRunner, Status
+
+    (tmp_path / "jobs").mkdir()
+    (tmp_path / "jobs" / "JMODEL").write_text("#!/bin/bash\n")
+    c = Config(severity_overrides={"R2OENV001": "warn"})
+    runner = LintRunner(tmp_path, c)
+    results = runner.run()
+    env_results = [
+        r for r in results if r.rule_id == "R2OENV001"
+    ]
+    # All R2OENV001 results overridden from FAIL to WARN
+    for r in env_results:
+        if r.status != Status.PASS:
+            assert r.status == Status.WARN

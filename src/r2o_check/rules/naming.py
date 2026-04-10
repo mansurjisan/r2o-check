@@ -242,3 +242,74 @@ def check_modulefile_naming(
 
 
 # R2ONAM004 retired — merged into R2OVER001-004 in versions.py.
+
+# COM output file naming conventions per NCO §III.B.
+# Must be lowercase, no special chars, no dates in filename,
+# periods separate categories, underscores within categories.
+_COM_BAD_PATTERNS = [
+    (re.compile(r"[A-Z]"), "contains uppercase characters"),
+    (re.compile(r"[^a-z0-9._\-+]"), "contains special characters"),
+    (re.compile(r"\d{8}"), "contains date in filename (use directory)"),
+]
+
+
+@register_rule(applies_to=MODEL_REPO_TYPES)
+def check_com_output_naming(
+    repo_path: Path, config: Config
+) -> list[LintResult]:
+    """R2ONAM006 — Validate COM output file naming.
+
+    NCO v11.0 Section III.B: output file names must be
+    lowercase, use periods to separate categories,
+    underscores within categories, no special characters,
+    no dates (directory contains the date). Format:
+    model.tHHz.var_info.f###.format
+    """
+    # Check parm/ for sample output filenames and scripts/
+    # for COMOUT references. Most directly: check if there's
+    # a com/ or wmo/ directory with output files.
+    results: list[LintResult] = []
+
+    # Check parm/wmo/ for WMO-headed files.
+    wmo_dir = repo_path / "parm" / "wmo"
+    dirs_to_check: list[Path] = []
+    if wmo_dir.is_dir():
+        dirs_to_check.append(wmo_dir)
+
+    if not dirs_to_check:
+        return []
+
+    for check_dir in dirs_to_check:
+        for f in sorted(check_dir.rglob("*")):
+            if not f.is_file() or f.name.startswith("."):
+                continue
+            issues: list[str] = []
+            for pattern, desc in _COM_BAD_PATTERNS:
+                if pattern.search(f.name):
+                    issues.append(desc)
+            if issues:
+                results.append(LintResult(
+                    status=Status.WARN,
+                    rule_id="R2ONAM006",
+                    message=(
+                        f"COM file '{f.name}': "
+                        f"{'; '.join(issues)}."
+                        " [NCO v11.0 III.B]"
+                    ),
+                    path=f,
+                    fix_hint=(
+                        "Use lowercase, periods between"
+                        " categories, no dates in filename."
+                    ),
+                ))
+            else:
+                results.append(LintResult(
+                    status=Status.PASS,
+                    rule_id="R2ONAM006",
+                    message=(
+                        f"COM file '{f.name}' follows"
+                        " naming. [NCO v11.0 III.B]"
+                    ),
+                    path=f,
+                ))
+    return results

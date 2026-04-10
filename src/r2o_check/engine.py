@@ -131,6 +131,7 @@ RULE_MODULES: list[str] = [
     "r2o_check.rules.modules",
     "r2o_check.rules.versions",
     "r2o_check.rules.ecflow",
+    "r2o_check.rules.crossref",
 ]
 
 
@@ -153,6 +154,21 @@ class LintRunner:
     def _applies(self, entry: RuleEntry) -> bool:
         """Check if a rule applies to the current repo type."""
         return self.config.repo_type in entry.applies_to
+
+    def _apply_override(self, result: LintResult) -> LintResult:
+        """Apply severity override from config if present."""
+        overrides = self.config.severity_overrides
+        if result.rule_id in overrides:
+            new_status = Status(overrides[result.rule_id])
+            if new_status != result.status:
+                result = LintResult(
+                    status=new_status,
+                    rule_id=result.rule_id,
+                    message=result.message,
+                    path=result.path,
+                    fix_hint=result.fix_hint,
+                )
+        return result
 
     def run(self) -> list[LintResult]:
         """Run all applicable, non-disabled rules."""
@@ -195,6 +211,8 @@ class LintRunner:
                 if result.rule_id not in (
                     self.config.disabled_rules
                 ):
+                    # Apply severity overrides.
+                    result = self._apply_override(result)
                     results.append(result)
                     if result.status == Status.PASS:
                         has_pass = True

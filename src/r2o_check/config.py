@@ -35,9 +35,12 @@ VALID_TOP_KEYS = {
     "standards_version",
     "repo_type",
     "disabled_rules",
+    "severity_overrides",
     "variants",
     "ecflow",
 }
+
+_VALID_SEVERITIES = {"pass", "warn", "fail", "error"}
 
 _REPO_TYPE_VALUES = {rt.value for rt in RepoType}
 
@@ -74,6 +77,9 @@ class Config:
     standards_version: str = "11.0.0"
     repo_type: RepoType = RepoType.OPERATIONAL_MODEL
     disabled_rules: list[str] = field(default_factory=list)
+    severity_overrides: dict[str, str] = field(
+        default_factory=dict
+    )
     variants: dict[str, Any] = field(default_factory=dict)
     ecflow: EcflowConfig = field(
         default_factory=EcflowConfig
@@ -131,6 +137,23 @@ class Config:
                 "disabled_rules must be a list of strings"
             )
 
+        severity_overrides = data.get("severity_overrides", {})
+        if not isinstance(severity_overrides, dict):
+            raise ValueError(
+                "severity_overrides must be a mapping"
+            )
+        for rid, sev in severity_overrides.items():
+            if not isinstance(sev, str):
+                raise ValueError(
+                    f"severity_overrides.{rid} must be a string"
+                )
+            if sev not in _VALID_SEVERITIES:
+                valid = ", ".join(sorted(_VALID_SEVERITIES))
+                raise ValueError(
+                    f"severity_overrides.{rid}: must be"
+                    f" one of: {valid}"
+                )
+
         variants = data.get("variants", {})
         if not isinstance(variants, dict):
             raise ValueError("variants must be a mapping")
@@ -144,6 +167,7 @@ class Config:
             standards_version=standards_version,
             repo_type=repo_type,
             disabled_rules=disabled_rules,
+            severity_overrides=severity_overrides,
             variants=variants,
             ecflow=ecflow,
         )
