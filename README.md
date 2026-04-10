@@ -1,18 +1,18 @@
 <p align="center">
   <h1 align="center">r2o-check</h1>
   <p align="center">
-    <strong>NCO Implementation Standards v11.0 compliance checker for NOAA operational model and workflow code</strong>
-  </p>
-  <p align="center">
     <a href="https://github.com/mansurjisan/r2o-check/actions/workflows/ci.yml"><img src="https://github.com/mansurjisan/r2o-check/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.9+-blue.svg" alt="Python 3.9+"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green.svg" alt="License"></a>
+      <p align="center">
+    <strong>NCO Implementation Standards v11.0 compliance checker for NOAA operational model and workflow code</strong>
+  </p>
+
   </p>
 </p>
 
----
 
-A software tool to automatically validate NOAA operational model packages against the [NCO WCOSS Implementation Standards v11.0](https://www.nco.ncep.noaa.gov/idsb/implementation_standards/), catching compliance issues before your code reaches IDSB.
+A software tool to automatically validate NOAA operational model packages against the [NCO WCOSS2 Implementation Standards v11.0](https://www.nco.ncep.noaa.gov/idsb/implementation_standards/), catching compliance issues before your code reaches IDSB.
 
 ## Install
 
@@ -105,10 +105,10 @@ jobs:
 
 ## Docs
 
-- [Quickstart](docs/quickstart.md) — install, configure, integrate
-- [Rules Reference](docs/rules.md) — every rule with examples and fix hints
-- [NCO Standards Mapping](docs/nco-standards-mapping.md) — rule ID to NCO section
-- [Contributing](CONTRIBUTING.md) — dev setup, adding rules
+- [Quickstart](docs/quickstart.md) - install, configure, integrate
+- [Rules Reference](docs/rules.md) - every rule with examples and fix hints
+- [NCO Standards Mapping](docs/nco-standards-mapping.md) - rule ID to NCO section
+- [Contributing](CONTRIBUTING.md) - dev setup, adding rules
 
 ## License
 
