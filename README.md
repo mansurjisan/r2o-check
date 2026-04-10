@@ -12,7 +12,7 @@
 
 ---
 
-Validates your model package against the [NCO WCOSS Implementation Standards v11.0](https://www.nco.ncep.noaa.gov/idsb/implementation_standards/) before you submit to IDSB. Checks directory structure, file naming, environment variables, build system, modulefiles, version files, and ecFlow scripts.
+Every NOAA model delivery to NCO must pass the [WCOSS Implementation Standards v11.0](https://www.nco.ncep.noaa.gov/idsb/implementation_standards/). r2o-check automates that review — run it locally or in CI to catch compliance issues before your code reaches IDSB.
 
 ## Install
 
