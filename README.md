@@ -13,7 +13,7 @@
 </p>
 
 
-A software tool to automatically validate NOAA operational model packages against the [NCO WCOSS2 Implementation Standards v11.0](https://www.nco.ncep.noaa.gov/idsb/implementation_standards/), catching compliance issues before your code reaches IDSB.
+r2o-check is a software designed to automatically validate NOAA operational model packages against the [NCO WCOSS2 Implementation Standards v11.0](https://www.nco.ncep.noaa.gov/idsb/implementation_standards/), catching compliance issues before your code reaches IDSB.
 
 ## Install
 
