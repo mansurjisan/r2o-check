@@ -17,10 +17,8 @@ from r2o_check.engine import (
     register_rule,
 )
 
-# Variables that §III.A Table 1 says are set in the J-job.
-# These are the ones r2o-check can verify statically by
-# checking for assignment or export patterns in J-job files.
-JJOB_REQUIRED_VARS: list[tuple[str, str]] = [
+# Core variables every J-job must set (§III.A Table 1).
+JJOB_CORE_VARS: list[tuple[str, str]] = [
     ("NET", "Model name (1st level of com)"),
     ("RUN", "Model run name (3rd level of com)"),
     ("PDY", "Date in YYYYMMDD format"),
@@ -30,16 +28,15 @@ JJOB_REQUIRED_VARS: list[tuple[str, str]] = [
     ("COMOUT", "Output com directory"),
 ]
 
-# Pattern-based vars — the "model" part varies per package.
-# We check for any variable matching USH*, EXEC*, PARM*, FIX*.
-JJOB_PATTERN_VARS: list[tuple[str, str]] = [
+# Context-dependent pattern vars — vary by job type.
+JJOB_CONTEXT_VARS: list[tuple[str, str]] = [
     ("USH", "Location of model ush files"),
     ("EXEC", "Location of model exec files"),
     ("PARM", "Location of model parm files"),
     ("FIX", "Location of model fix files"),
 ]
 
-# Matches: export VAR=..., VAR=..., or ${VAR:-...}
+
 def _var_is_set(content: str, var: str) -> bool:
     """Check if a variable is assigned in file content."""
     v = re.escape(var)
@@ -48,36 +45,40 @@ def _var_is_set(content: str, var: str) -> bool:
 
 
 def _pattern_var_is_set(content: str, prefix: str) -> bool:
-    """Check if any variable starting with prefix is assigned."""
-    pat = rf"(?:export\s+)?{re.escape(prefix)}[A-Za-z_]*\s*="
+    """Check if any variable starting with prefix is set."""
+    p = re.escape(prefix)
+    pat = rf"(?:export\s+)?{p}[A-Za-z_]*\s*="
     if re.search(pat, content):
         return True
-    pat2 = rf"\$\{{{re.escape(prefix)}[A-Za-z_]*:-"
+    pat2 = rf"\$\{{{p}[A-Za-z_]*:-"
     return re.search(pat2, content) is not None
 
 
-@register_rule(applies_to=MODEL_REPO_TYPES)
-def check_jjob_env_vars(
-    repo_path: Path, config: Config
-) -> list[LintResult]:
-    """R2OENV001 — Check J-jobs set required env vars.
-
-    NCO v11.0 Section III.A, Table 1: J-jobs must set
-    NET, RUN, PDY, cycle, DATA, COMIN, COMOUT and the
-    model-specific location vars (USH*, EXEC*, PARM*, FIX*).
-    """
+def _iter_jjobs(repo_path: Path) -> list[Path]:
+    """Return sorted list of J-job files."""
     jobs_dir = repo_path / "jobs"
     if not jobs_dir.is_dir():
         return []
+    return sorted(
+        f for f in jobs_dir.iterdir() if f.is_file()
+    )
 
+
+@register_rule(applies_to=MODEL_REPO_TYPES)
+def check_jjob_core_vars(
+    repo_path: Path, config: Config
+) -> list[LintResult]:
+    """R2OENV001 — Check J-jobs set core env vars.
+
+    NCO v11.0 Section III.A, Table 1: every J-job must set
+    NET, RUN, PDY, cycle, DATA, COMIN, COMOUT.
+    """
     results: list[LintResult] = []
-    for jf in sorted(jobs_dir.iterdir()):
-        if not jf.is_file():
-            continue
-        content = jf.read_text(encoding="utf-8", errors="replace")
-
-        # Check exact-name vars.
-        for var, desc in JJOB_REQUIRED_VARS:
+    for jf in _iter_jjobs(repo_path):
+        content = jf.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        for var, desc in JJOB_CORE_VARS:
             if _var_is_set(content, var):
                 results.append(LintResult(
                     status=Status.PASS,
@@ -90,7 +91,7 @@ def check_jjob_env_vars(
                 ))
             else:
                 results.append(LintResult(
-                    status=Status.WARN,
+                    status=Status.FAIL,
                     rule_id="R2OENV001",
                     message=(
                         f"{jf.name}: missing ${var}"
@@ -100,16 +101,34 @@ def check_jjob_env_vars(
                     path=jf,
                     fix_hint=(
                         f"Add 'export {var}=...' or"
-                        f" '${{{var}:-...}}' to {jf.name}."
+                        f" '${{{var}:-...}}' to"
+                        f" {jf.name}."
                     ),
                 ))
+    return results
 
-        # Check pattern vars (USH*, EXEC*, PARM*, FIX*).
-        for prefix, desc in JJOB_PATTERN_VARS:
+
+@register_rule(applies_to=MODEL_REPO_TYPES)
+def check_jjob_context_vars(
+    repo_path: Path, config: Config
+) -> list[LintResult]:
+    """R2OENV002 — Check J-jobs set context env vars.
+
+    NCO v11.0 Section III.A, Table 1: J-jobs should set
+    model-specific location vars (USH*, EXEC*, PARM*, FIX*)
+    when used. WARN because some job types legitimately
+    omit these.
+    """
+    results: list[LintResult] = []
+    for jf in _iter_jjobs(repo_path):
+        content = jf.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        for prefix, desc in JJOB_CONTEXT_VARS:
             if _pattern_var_is_set(content, prefix):
                 results.append(LintResult(
                     status=Status.PASS,
-                    rule_id="R2OENV001",
+                    rule_id="R2OENV002",
                     message=(
                         f"{jf.name}: sets ${prefix}* var."
                         " [NCO v11.0 III.A Table 1]"
@@ -119,7 +138,7 @@ def check_jjob_env_vars(
             else:
                 results.append(LintResult(
                     status=Status.WARN,
-                    rule_id="R2OENV001",
+                    rule_id="R2OENV002",
                     message=(
                         f"{jf.name}: missing ${prefix}*"
                         f" var ({desc})."
@@ -127,8 +146,8 @@ def check_jjob_env_vars(
                     ),
                     path=jf,
                     fix_hint=(
-                        f"Add 'export {prefix}model=...' to"
-                        f" {jf.name}."
+                        f"Add 'export {prefix}model=...'"
+                        f" to {jf.name}."
                     ),
                 ))
     return results

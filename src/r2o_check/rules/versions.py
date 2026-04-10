@@ -1,7 +1,8 @@
-"""Version file content checks.
+"""Version file checks.
 
 NCO Implementation Standards v11.0, Section VI.B, Table 3.
-Deeper validation of run.ver and build.ver beyond presence.
+R2OVER001/002: presence checks (FAIL).
+R2OVER003/004: content format checks (WARN).
 """
 
 from __future__ import annotations
@@ -17,51 +18,118 @@ from r2o_check.engine import (
     register_rule,
 )
 
-# Expected: export var_ver=vX.Y.Z or export var_ver=X.Y.Z
-_VER_ASSIGNMENT = re.compile(
-    r"^export\s+(\w+)=(.+)$"
-)
+_VER_ASSIGNMENT = re.compile(r"^export\s+(\w+)=(.+)$")
 
-# Version value pattern (loose): vX.Y.Z or X.Y.Z
-_VERSION_VALUE = re.compile(
-    r"^v?\d+\.\d+(\.\d+)?$"
-)
+
+# ── Presence checks (FAIL) ────────────────────────────────────
+
+
+@register_rule(applies_to=MODEL_REPO_TYPES)
+def check_run_ver_exists(
+    repo_path: Path, config: Config
+) -> list[LintResult]:
+    """R2OVER001 — Check versions/run.ver exists.
+
+    NCO v11.0 Section VI.B, Table 3: versions/ must contain
+    run.ver to track runtime package/module versions.
+    """
+    ver_file = repo_path / "versions" / "run.ver"
+    if ver_file.is_file():
+        return [LintResult(
+            status=Status.PASS,
+            rule_id="R2OVER001",
+            message=(
+                "Version file 'run.ver' exists."
+                " [NCO v11.0 VI.B Table 3]"
+            ),
+            path=ver_file,
+        )]
+    return [LintResult(
+        status=Status.FAIL,
+        rule_id="R2OVER001",
+        message=(
+            "Missing version file 'run.ver'."
+            " [NCO v11.0 VI.B Table 3]"
+        ),
+        path=repo_path / "versions" / "run.ver",
+        fix_hint=(
+            "Create 'versions/run.ver' with"
+            " 'export model_ver=vX.Y.Z' entries."
+        ),
+    )]
+
+
+@register_rule(applies_to=MODEL_REPO_TYPES)
+def check_build_ver_exists(
+    repo_path: Path, config: Config
+) -> list[LintResult]:
+    """R2OVER002 — Check versions/build.ver exists.
+
+    NCO v11.0 Section VI.B, Table 3: versions/ must contain
+    build.ver to track compile-time package/module versions.
+    """
+    ver_file = repo_path / "versions" / "build.ver"
+    if ver_file.is_file():
+        return [LintResult(
+            status=Status.PASS,
+            rule_id="R2OVER002",
+            message=(
+                "Version file 'build.ver' exists."
+                " [NCO v11.0 VI.B Table 3]"
+            ),
+            path=ver_file,
+        )]
+    return [LintResult(
+        status=Status.FAIL,
+        rule_id="R2OVER002",
+        message=(
+            "Missing version file 'build.ver'."
+            " [NCO v11.0 VI.B Table 3]"
+        ),
+        path=repo_path / "versions" / "build.ver",
+        fix_hint=(
+            "Create 'versions/build.ver' with"
+            " 'export model_ver=vX.Y.Z' entries."
+        ),
+    )]
+
+
+# ── Content format checks (WARN) ──────────────────────────────
 
 
 @register_rule(applies_to=MODEL_REPO_TYPES)
 def check_run_ver_content(
     repo_path: Path, config: Config
 ) -> list[LintResult]:
-    """R2OVER001 — Validate run.ver content.
+    """R2OVER003 — Validate run.ver content format.
 
-    NCO v11.0 Section VI.B, Table 3: run.ver tracks package
-    and module versions used at runtime. Each line must be
-    'export var=value'. Must not reference unused packages.
+    NCO v11.0 Section VI.B, Table 3: each line must be
+    'export var=value' or a comment. Vars should use
+    *_ver suffix.
     """
     ver_file = repo_path / "versions" / "run.ver"
     if not ver_file.is_file():
         return []
-
-    return _check_ver_file(ver_file, "R2OVER001", "run.ver")
+    return _check_ver_content(ver_file, "R2OVER003", "run.ver")
 
 
 @register_rule(applies_to=MODEL_REPO_TYPES)
 def check_build_ver_content(
     repo_path: Path, config: Config
 ) -> list[LintResult]:
-    """R2OVER002 — Validate build.ver content.
+    """R2OVER004 — Validate build.ver content format.
 
-    NCO v11.0 Section VI.B, Table 3: build.ver tracks package
-    and module versions used at compile time.
+    NCO v11.0 Section VI.B, Table 3: same rules as run.ver.
     """
     ver_file = repo_path / "versions" / "build.ver"
     if not ver_file.is_file():
         return []
+    return _check_ver_content(
+        ver_file, "R2OVER004", "build.ver"
+    )
 
-    return _check_ver_file(ver_file, "R2OVER002", "build.ver")
 
-
-def _check_ver_file(
+def _check_ver_content(
     ver_file: Path, rule_id: str, label: str
 ) -> list[LintResult]:
     """Validate a .ver file's content."""
@@ -95,8 +163,6 @@ def _check_ver_file(
 
         has_exports = True
         var_name = m.group(1)
-
-        # Check naming convention: *_ver suffix.
         if not var_name.endswith("_ver"):
             results.append(LintResult(
                 status=Status.WARN,

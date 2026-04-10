@@ -44,6 +44,7 @@ class RuleEntry:
 
     func: RuleFunc
     applies_to: list[RepoType]
+    mutually_exclusive_with: list[str] | None = None
 
 
 # Registry populated by @register_rule decorator.
@@ -80,7 +81,9 @@ def register_rule(func: RuleFunc) -> RuleFunc: ...
 
 @overload
 def register_rule(
-    *, applies_to: list[RepoType]
+    *,
+    applies_to: list[RepoType],
+    mutually_exclusive_with: list[str] | None = ...,
 ) -> Callable[[RuleFunc], RuleFunc]: ...
 
 
@@ -88,10 +91,13 @@ def register_rule(
     func: RuleFunc | None = None,
     *,
     applies_to: list[RepoType] | None = None,
+    mutually_exclusive_with: list[str] | None = None,
 ) -> RuleFunc | Callable[[RuleFunc], RuleFunc]:
     """Register a rule function.
 
     Use as @register_rule or @register_rule(applies_to=[...]).
+    mutually_exclusive_with: list of rule IDs. If any of
+    those rules produced PASS results, this rule is skipped.
     """
     effective = (
         applies_to if applies_to is not None
@@ -100,7 +106,9 @@ def register_rule(
 
     def _decorator(fn: RuleFunc) -> RuleFunc:
         _RULE_REGISTRY[fn.__name__] = RuleEntry(
-            func=fn, applies_to=effective
+            func=fn,
+            applies_to=effective,
+            mutually_exclusive_with=mutually_exclusive_with,
         )
         return fn
 
@@ -151,9 +159,20 @@ class LintRunner:
             self.discover_rules()
 
         results: list[LintResult] = []
+        # Track which rule IDs have run (produced any results),
+        # for mutual-exclusion logic.
+        ran_rule_ids: set[str] = set()
+
         for name, entry in sorted(self._rules.items()):
             if not self._applies(entry):
                 continue
+            # Check mutual exclusion: skip if an exclusive
+            # partner already ran successfully.
+            if entry.mutually_exclusive_with:
+                if ran_rule_ids & set(
+                    entry.mutually_exclusive_with
+                ):
+                    continue
             try:
                 rule_results = entry.func(
                     self.repo_path, self.config
@@ -164,16 +183,25 @@ class LintRunner:
                         status=Status.ERROR,
                         rule_id=_infer_rule_id(entry.func),
                         message=(
-                            f"Rule {name!r} raised an exception:"
+                            f"Rule {name!r} raised an"
+                            f" exception:"
                             f" {traceback.format_exc()}"
                         ),
                     )
                 ]
+            has_pass = False
             for result in rule_results:
                 if result.rule_id not in (
                     self.config.disabled_rules
                 ):
                     results.append(result)
+                    if result.status == Status.PASS:
+                        has_pass = True
+            # Only mark as "ran" if it produced PASS results
+            # (not just warnings about missing files).
+            if has_pass:
+                rid = _infer_rule_id(entry.func)
+                ran_rule_ids.add(rid)
         return results
 
     def run_rules(self, rule_ids: Sequence[str]) -> list[LintResult]:

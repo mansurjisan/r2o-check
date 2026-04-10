@@ -1,0 +1,17 @@
+#!/bin/bash
+set -x
+
+export NET="model"
+export RUN="model"
+export PDY=${PDY:-$(date +%Y%m%d)}
+export cycle=${cycle:-t00z}
+export DATA=${DATA:-${DATAROOT}/${jobid}}
+export COMIN=${COMIN:-$(compath.py ${envir}/${NET}/${model_ver}/${RUN}.${PDY})}
+export COMOUT=${COMOUT:-$(compath.py -o ${NET}/${model_ver}/${RUN}.${PDY})}
+
+export USHmodel=${USHmodel:-${HOMEmodel}/ush}
+export EXECmodel=${EXECmodel:-${HOMEmodel}/exec}
+export PARMmodel=${PARMmodel:-${HOMEmodel}/parm}
+export FIXmodel=${FIXmodel:-${HOMEmodel}/fix}
+
+${SCRIPTSmodel}/exmodel_task.sh

@@ -8,7 +8,10 @@ import pytest
 
 from r2o_check.config import Config
 from r2o_check.engine import Status
-from r2o_check.rules.build import check_makefile_targets
+from r2o_check.rules.build import (
+    check_cmake_build,
+    check_makefile_targets,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 RRFS = FIXTURES / "rrfs_style"
@@ -71,3 +74,57 @@ class TestMakefileTargets:
         results = check_makefile_targets(tmp_path, config)
         assert all(r.status == Status.PASS for r in results)
         assert len(results) == 4
+
+
+class TestCmakeBuild:
+    def test_cmake_repo_passes(self, config: Config) -> None:
+        cmake = FIXTURES / "cmake_repo"
+        results = check_cmake_build(cmake, config)
+        passes = [r for r in results if r.status == Status.PASS]
+        assert len(passes) == 2  # project + install
+
+    def test_no_sorc_returns_empty(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        assert check_cmake_build(tmp_path, config) == []
+
+    def test_sorc_no_cmake_warns(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        (tmp_path / "sorc").mkdir()
+        results = check_cmake_build(tmp_path, config)
+        assert results[0].status == Status.WARN
+
+    def test_mutual_exclusion_via_runner(
+        self, config: Config
+    ) -> None:
+        """RRFS has Makefile — R2OBLD002 should be skipped."""
+        from r2o_check.engine import LintRunner
+
+        runner = LintRunner(RRFS, config)
+        results = runner.run()
+        bld_ids = {
+            r.rule_id
+            for r in results
+            if r.rule_id.startswith("R2OBLD")
+        }
+        # Only R2OBLD001 should run (Makefile present)
+        assert "R2OBLD001" in bld_ids
+        assert "R2OBLD002" not in bld_ids
+
+    def test_cmake_only_skips_makefile_rule(
+        self, config: Config
+    ) -> None:
+        """cmake_repo has CMake — R2OBLD001 should be skipped."""
+        from r2o_check.engine import LintRunner
+
+        cmake = FIXTURES / "cmake_repo"
+        runner = LintRunner(cmake, config)
+        results = runner.run()
+        bld_ids = {
+            r.rule_id
+            for r in results
+            if r.rule_id.startswith("R2OBLD")
+        }
+        assert "R2OBLD002" in bld_ids
+        assert "R2OBLD001" not in bld_ids

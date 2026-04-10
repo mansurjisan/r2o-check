@@ -46,7 +46,10 @@ def _extract_targets(content: str) -> set[str]:
     return {m.group(1) for m in _TARGET_RE.finditer(content)}
 
 
-@register_rule(applies_to=BUILD_REPO_TYPES)
+@register_rule(
+    applies_to=BUILD_REPO_TYPES,
+    mutually_exclusive_with=["R2OBLD002"],
+)
 def check_makefile_targets(
     repo_path: Path, config: Config
 ) -> list[LintResult]:
@@ -57,8 +60,10 @@ def check_makefile_targets(
     """
     makefiles = _find_makefiles(repo_path)
     if not makefiles:
-        # No makefiles found — not necessarily an error;
-        # some repos use CMake or other build systems.
+        # No Makefiles — defer to R2OBLD002 (CMake) if
+        # CMakeLists.txt exists; otherwise warn.
+        if _find_cmake_files(repo_path):
+            return []
         sorc = repo_path / "sorc"
         if not sorc.is_dir():
             return []
@@ -106,6 +111,88 @@ def check_makefile_targets(
                     path=mf,
                     fix_hint=(
                         f"Add '{req}:' target to {rel}."
+                    ),
+                ))
+    return results
+
+
+# CMake equivalent targets.
+CMAKE_EXPECTED_PATTERNS: list[tuple[str, str]] = [
+    ("install", r"install\s*\("),
+    ("project", r"project\s*\("),
+]
+
+
+def _find_cmake_files(repo_path: Path) -> list[Path]:
+    """Find CMakeLists.txt under sorc/."""
+    sorc = repo_path / "sorc"
+    if not sorc.is_dir():
+        return []
+    return sorted(sorc.rglob("CMakeLists.txt"))
+
+
+@register_rule(
+    applies_to=BUILD_REPO_TYPES,
+    mutually_exclusive_with=["R2OBLD001"],
+)
+def check_cmake_build(
+    repo_path: Path, config: Config
+) -> list[LintResult]:
+    """R2OBLD002 — Check CMake build system.
+
+    NCO v11.0 Section VI.A.8 equivalent for CMake: project()
+    and install() directives should be present. WARN severity
+    because CMake is the modern convention but NCO §VI.A.8
+    explicitly references Makefile targets.
+    """
+    cmake_files = _find_cmake_files(repo_path)
+    if not cmake_files:
+        # No CMake — defer to R2OBLD001 (Makefile) if present.
+        if _find_makefiles(repo_path):
+            return []
+        sorc = repo_path / "sorc"
+        if not sorc.is_dir():
+            return []
+        return [LintResult(
+            status=Status.WARN,
+            rule_id="R2OBLD002",
+            message=(
+                "No CMakeLists.txt found under sorc/."
+                " [NCO v11.0 VI.A.8]"
+            ),
+            path=sorc,
+            fix_hint="Add a CMakeLists.txt or Makefile.",
+        )]
+
+    results: list[LintResult] = []
+    for cf in cmake_files:
+        content = cf.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        rel = cf.relative_to(repo_path)
+
+        for label, pattern in CMAKE_EXPECTED_PATTERNS:
+            if re.search(pattern, content):
+                results.append(LintResult(
+                    status=Status.PASS,
+                    rule_id="R2OBLD002",
+                    message=(
+                        f"{rel}: has '{label}' directive."
+                        " [NCO v11.0 VI.A.8]"
+                    ),
+                    path=cf,
+                ))
+            else:
+                results.append(LintResult(
+                    status=Status.WARN,
+                    rule_id="R2OBLD002",
+                    message=(
+                        f"{rel}: missing '{label}' directive."
+                        " [NCO v11.0 VI.A.8]"
+                    ),
+                    path=cf,
+                    fix_hint=(
+                        f"Add '{label}(...)' to {rel}."
                     ),
                 ))
     return results

@@ -13,7 +13,6 @@ from r2o_check.rules.naming import (
     check_jjob_naming,
     check_modulefile_naming,
     check_ush_naming,
-    check_version_files,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -134,52 +133,7 @@ class TestModulefileNaming:
         assert results[0].status == Status.PASS
 
 
-# ── R2ONAM004: Version file naming and format ─────────────────
-
-
-class TestVersionFiles:
-    def test_rrfs_versions_pass(self, config: Config) -> None:
-        results = check_version_files(RRFS, config)
-        # 2 presence checks (pass) + format checks (pass)
-        passes = [r for r in results if r.status == Status.PASS]
-        fails = [r for r in results if r.status == Status.FAIL]
-        warns = [r for r in results if r.status == Status.WARN]
-        assert len(fails) == 0
-        assert len(warns) == 0
-        assert len(passes) >= 2
-
-    def test_bad_versions_missing_build_ver(
-        self, config: Config
-    ) -> None:
-        results = check_version_files(BAD, config)
-        fail_msgs = [
-            r.message
-            for r in results
-            if r.status == Status.FAIL
-        ]
-        assert any("build.ver" in m for m in fail_msgs)
-
-    def test_bad_versions_format_warning(
-        self, config: Config
-    ) -> None:
-        results = check_version_files(BAD, config)
-        warns = [r for r in results if r.status == Status.WARN]
-        # run.ver has 2 lines: "model_ver=v1.0.0" (missing export)
-        # and "this is not valid"
-        assert len(warns) >= 2
-
-    def test_no_versions_dir_returns_empty(
-        self, tmp_path: Path, config: Config
-    ) -> None:
-        results = check_version_files(tmp_path, config)
-        assert results == []
-
-    def test_stofs_versions_pass(self, config: Config) -> None:
-        results = check_version_files(STOFS, config)
-        passes = [r for r in results if r.status == Status.PASS]
-        fails = [r for r in results if r.status == Status.FAIL]
-        assert len(fails) == 0
-        assert len(passes) >= 2
+# R2ONAM004 retired — version checks now in R2OVER001-004.
 
 
 # ── Integration: naming rules via LintRunner ──────────────────
@@ -206,10 +160,9 @@ class TestNamingIntegration:
             if r.rule_id.startswith("R2ONAM")
             and r.status == Status.FAIL
         ]
-        # 3 bad J-jobs + 2 bad modulefiles
-        # + 1 missing build.ver = 6+
-        # (bad ex-scripts don't start with 'ex' so not flagged
-        # by the recursive rule — except exmodel_task.txt)
+        # 3 bad J-jobs + 2 bad modulefiles + 1 bad ex-script
+        # (exmodel_task.txt starts with 'ex' but wrong ext).
+        # R2ONAM004 retired — version checks now in R2OVER.
         assert len(naming_fails) >= 6
 
 
