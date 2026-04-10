@@ -9,9 +9,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable
+from typing import Callable, overload
 
-from r2o_check.config import Config
+from r2o_check.config import Config, RepoType
 
 
 class Status(Enum):
@@ -37,17 +37,64 @@ class LintResult:
 # Type alias for a rule function.
 RuleFunc = Callable[[Path, Config], list[LintResult]]
 
+
+@dataclass
+class RuleEntry:
+    """A registered rule with its metadata."""
+
+    func: RuleFunc
+    applies_to: list[RepoType]
+
+
 # Registry populated by @register_rule decorator.
-_RULE_REGISTRY: dict[str, RuleFunc] = {}
+_RULE_REGISTRY: dict[str, RuleEntry] = {}
+
+# All repo types, for rules that apply universally.
+ALL_REPO_TYPES: list[RepoType] = list(RepoType)
+
+# Default applies_to for model-specific rules.
+MODEL_REPO_TYPES: list[RepoType] = [
+    RepoType.OPERATIONAL_MODEL,
+    RepoType.WORKFLOW,
+]
 
 
-def register_rule(func: RuleFunc) -> RuleFunc:
-    """Decorator that registers a rule function by its name."""
-    _RULE_REGISTRY[func.__name__] = func
-    return func
+@overload
+def register_rule(func: RuleFunc) -> RuleFunc: ...
 
 
-def get_registered_rules() -> dict[str, RuleFunc]:
+@overload
+def register_rule(
+    *, applies_to: list[RepoType]
+) -> Callable[[RuleFunc], RuleFunc]: ...
+
+
+def register_rule(
+    func: RuleFunc | None = None,
+    *,
+    applies_to: list[RepoType] | None = None,
+) -> RuleFunc | Callable[[RuleFunc], RuleFunc]:
+    """Register a rule function.
+
+    Use as @register_rule or @register_rule(applies_to=[...]).
+    """
+    effective = (
+        applies_to if applies_to is not None
+        else list(ALL_REPO_TYPES)
+    )
+
+    def _decorator(fn: RuleFunc) -> RuleFunc:
+        _RULE_REGISTRY[fn.__name__] = RuleEntry(
+            func=fn, applies_to=effective
+        )
+        return fn
+
+    if func is not None:
+        return _decorator(func)
+    return _decorator
+
+
+def get_registered_rules() -> dict[str, RuleEntry]:
     """Return a copy of the current rule registry."""
     return dict(_RULE_REGISTRY)
 
@@ -55,45 +102,58 @@ def get_registered_rules() -> dict[str, RuleFunc]:
 # Mapping from module names to their dotted import paths.
 RULE_MODULES: list[str] = [
     "r2o_check.rules.structure",
+    "r2o_check.rules.naming",
 ]
 
 
 class LintRunner:
-    """Discovers and executes lint rules against a repository path."""
+    """Discovers and executes lint rules against a repo path."""
 
-    def __init__(self, repo_path: Path, config: Config | None = None) -> None:
+    def __init__(
+        self, repo_path: Path, config: Config | None = None
+    ) -> None:
         self.repo_path = repo_path.resolve()
         self.config = config or Config()
-        self._rules: dict[str, RuleFunc] = {}
+        self._rules: dict[str, RuleEntry] = {}
 
     def discover_rules(self) -> None:
-        """Import rule modules so their @register_rule decorators fire."""
+        """Import rule modules to trigger @register_rule."""
         for module_name in RULE_MODULES:
             importlib.import_module(module_name)
         self._rules = get_registered_rules()
 
+    def _applies(self, entry: RuleEntry) -> bool:
+        """Check if a rule applies to the current repo type."""
+        return self.config.repo_type in entry.applies_to
+
     def run(self) -> list[LintResult]:
-        """Run all discovered rules that are not disabled in config."""
+        """Run all applicable, non-disabled rules."""
         if not self._rules:
             self.discover_rules()
 
         results: list[LintResult] = []
-        for name, func in sorted(self._rules.items()):
+        for name, entry in sorted(self._rules.items()):
+            if not self._applies(entry):
+                continue
             try:
-                rule_results = func(self.repo_path, self.config)
+                rule_results = entry.func(
+                    self.repo_path, self.config
+                )
             except Exception:
                 rule_results = [
                     LintResult(
                         status=Status.ERROR,
-                        rule_id=_infer_rule_id(func),
+                        rule_id=_infer_rule_id(entry.func),
                         message=(
-                            f"Rule {name!r} raised an exception: "
-                            f"{traceback.format_exc()}"
+                            f"Rule {name!r} raised an exception:"
+                            f" {traceback.format_exc()}"
                         ),
                     )
                 ]
             for result in rule_results:
-                if result.rule_id not in self.config.disabled_rules:
+                if result.rule_id not in (
+                    self.config.disabled_rules
+                ):
                     results.append(result)
         return results
 
@@ -103,20 +163,22 @@ class LintRunner:
             self.discover_rules()
 
         results: list[LintResult] = []
-        for name, func in sorted(self._rules.items()):
-            rid = _infer_rule_id(func)
+        for name, entry in sorted(self._rules.items()):
+            rid = _infer_rule_id(entry.func)
             if rid not in rule_ids:
                 continue
             try:
-                rule_results = func(self.repo_path, self.config)
+                rule_results = entry.func(
+                    self.repo_path, self.config
+                )
             except Exception:
                 rule_results = [
                     LintResult(
                         status=Status.ERROR,
                         rule_id=rid,
                         message=(
-                            f"Rule {name!r} raised an exception: "
-                            f"{traceback.format_exc()}"
+                            f"Rule {name!r} raised an exception:"
+                            f" {traceback.format_exc()}"
                         ),
                     )
                 ]
@@ -125,7 +187,7 @@ class LintRunner:
 
 
 def _infer_rule_id(func: RuleFunc) -> str:
-    """Try to extract a rule ID from the function's docstring or name."""
+    """Extract a rule ID from docstring or fall back to name."""
     doc = inspect.getdoc(func) or ""
     for line in doc.splitlines():
         stripped = line.strip()
