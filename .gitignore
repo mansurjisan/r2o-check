@@ -1,4 +1,4 @@
-*.md
+CLAUDE.md
 __pycache__/
 *.py[cod]
 *.egg-info/
