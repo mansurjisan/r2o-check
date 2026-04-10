@@ -2,10 +2,10 @@
 %include <head.h>
 
 #PBS -l walltime=01:00:00
-#PBS -l select=1:ncpus=24
 
 set -x
-
+cp /lfs/h1/ops/prod/data/input.dat $DATA/
+ln -sf /gpfs/dell1/nco/ops/nwprod/lib/libfoo.a $DATA/
 $HOMEmodel/jobs/JMODEL_TASK
 
 %include <tail.h>

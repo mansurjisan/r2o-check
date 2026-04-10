@@ -1,0 +1,21 @@
+#!/bin/bash
+%include <head.h>
+
+#PBS -l walltime=01:00:00
+#PBS -l select=1:ncpus=24
+#PBS -q dev
+
+%include <envir-p1.h>
+
+set -x
+
+model_ver=%MODEL_VER%
+export job="model_forecast_%CYC%"
+export jobid="${job}.${PBS_JOBID:-$$}"
+
+export KEEPDATA=%KEEPDATA:NO%
+export SENDDBN=%SENDDBN:YES%
+
+$HOMEmodel/jobs/JMODEL_FORECAST
+
+%include <tail.h>

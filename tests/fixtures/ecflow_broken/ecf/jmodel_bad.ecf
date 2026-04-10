@@ -1,0 +1,7 @@
+#!/bin/bash
+set -x
+
+$HOMEmodel/jobs/JMODEL_TASK
+
+ecflow_client --init
+# Missing --complete!

@@ -1,0 +1,4 @@
+#!/bin/bash
+%include <head.h>
+set -x
+$HOMEmodel/jobs/JMODEL_TASK

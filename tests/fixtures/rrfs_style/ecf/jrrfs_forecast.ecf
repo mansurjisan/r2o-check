@@ -1,0 +1,18 @@
+#!/bin/bash
+%include <head.h>
+
+#PBS -l walltime=02:00:00
+#PBS -l select=10:ncpus=128
+#PBS -q %QUEUE%
+
+set -x
+
+%include <envir-p1.h>
+
+model_ver=%MODEL_VER%
+export job="rrfs_forecast_%CYC%"
+export jobid="${job}.${PBS_JOBID:-$$}"
+
+$HOMErrfs/jobs/JRRFS_FORECAST
+
+%include <tail.h>
