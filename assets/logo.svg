@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" role="img" aria-label="r2o-check logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="60 30 220 200" role="img" aria-label="r2o-check logo">
   <title>r2o-check</title>
   <desc>A workflow DAG with a glowing repo folder, a workflow root node, and a pulsing green verification checkmark, with the r2o-check wordmark below.</desc>
 
@@ -71,6 +71,5 @@
     <path class="check-path" d="M199 164 L209 174 L225 156"/>
   </g>
 
-  <!-- Wordmark -->
-  <text class="wordmark" x="160" y="286" text-anchor="middle">r2o-check</text>
+  <!-- Wordmark removed -->
 </svg>
