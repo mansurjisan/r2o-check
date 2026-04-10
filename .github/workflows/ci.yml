@@ -34,3 +34,6 @@ jobs:
 
       - name: Pytest with coverage
         run: pytest --cov=r2o_check --cov-report=term-missing --cov-fail-under=85
+
+      - name: Self-check
+        run: r2o-check lint .
