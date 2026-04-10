@@ -7,15 +7,19 @@ name = "r2o-check"
 version = "0.1.0"
 description = "NCO Implementation Standards v11.0 compliance checker for NOAA operational model code"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
 requires-python = ">=3.9"
 authors = [
-    { name = "r2o-check contributors" },
+    { name = "Mansur Jisan", email = "mansur.jisan@noaa.gov" },
 ]
-keywords = ["NOAA", "NCO", "linting", "compliance", "operational-models"]
+keywords = [
+    "NOAA", "NCO", "linting", "compliance",
+    "operational-models", "R2O", "WCOSS",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
     "Topic :: Software Development :: Quality Assurance",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -29,6 +33,11 @@ dependencies = [
     "rich>=12.0",
     "pyyaml>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mansurjisan/r2o-check"
+Repository = "https://github.com/mansurjisan/r2o-check"
+Issues = "https://github.com/mansurjisan/r2o-check/issues"
 
 [project.scripts]
 r2o-check = "r2o_check.cli:main"
