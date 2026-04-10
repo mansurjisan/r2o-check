@@ -12,7 +12,7 @@
 
 ---
 
-Every NOAA model delivery to NCO must pass the [WCOSS Implementation Standards v11.0](https://www.nco.ncep.noaa.gov/idsb/implementation_standards/). r2o-check automates that review — run it locally or in CI to catch compliance issues before your code reaches IDSB.
+A software tool to automatically validate NOAA operational model packages against the [NCO WCOSS Implementation Standards v11.0](https://www.nco.ncep.noaa.gov/idsb/implementation_standards/), catching compliance issues before your code reaches IDSB.
 
 ## Install
 
