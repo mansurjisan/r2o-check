@@ -97,3 +97,44 @@ def test_non_mapping_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="must be a YAML mapping"):
         load_config(tmp_path)
+
+
+# ── Namespaced config sections ────────────────────────────────
+
+
+def test_ecflow_config_defaults() -> None:
+    c = Config()
+    from r2o_check.config import DEFAULT_HARDCODED_PATHS
+
+    assert c.ecflow.hardcoded_path_prefixes == DEFAULT_HARDCODED_PATHS
+
+
+def test_ecflow_config_custom(tmp_path: Path) -> None:
+    (tmp_path / ".r2o-check.yml").write_text(
+        "ecflow:\n"
+        "  hardcoded_path_prefixes:\n"
+        "    - /custom/\n"
+        "    - /mysite/\n"
+    )
+    c = load_config(tmp_path)
+    assert c.ecflow.hardcoded_path_prefixes == [
+        "/custom/",
+        "/mysite/",
+    ]
+
+
+def test_ecflow_config_invalid(tmp_path: Path) -> None:
+    (tmp_path / ".r2o-check.yml").write_text(
+        "ecflow:\n  hardcoded_path_prefixes: not_a_list\n"
+    )
+    with pytest.raises(
+        ValueError, match="hardcoded_path_prefixes"
+    ):
+        load_config(tmp_path)
+
+
+def test_ecflow_key_accepted(tmp_path: Path) -> None:
+    """ecflow is a valid top-level key, not rejected."""
+    (tmp_path / ".r2o-check.yml").write_text("ecflow: {}\n")
+    c = load_config(tmp_path)
+    assert c.ecflow is not None

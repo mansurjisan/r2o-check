@@ -9,6 +9,7 @@ import pytest
 from r2o_check.config import Config
 from r2o_check.engine import Status
 from r2o_check.rules.ecflow import (
+    check_ecf_custom_head_tail,
     check_ecf_directives,
     check_ecf_hardcoded_paths,
     check_ecf_includes,
@@ -20,6 +21,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 COMPLIANT = FIXTURES / "ecflow_compliant"
 BROKEN = FIXTURES / "ecflow_broken"
 HARDCODED = FIXTURES / "ecflow_hardcoded"
+CUSTOM_OK = FIXTURES / "ecflow_custom_head_ok"
+CUSTOM_BROKEN = FIXTURES / "ecflow_custom_head_broken"
 RRFS = FIXTURES / "rrfs_style"
 
 
@@ -212,3 +215,76 @@ class TestEcflowIntegration:
             and r.status == Status.FAIL
         ]
         assert len(ecf_fails) >= 3  # includes, init/complete, trap
+
+
+# ── R2OECF006: custom head.h/tail.h ──────────────────────────
+
+
+class TestCustomHeadTail:
+    def test_ok_head_tail_pass(self, config: Config) -> None:
+        results = check_ecf_custom_head_tail(CUSTOM_OK, config)
+        assert len(results) == 2
+        assert all(r.status == Status.PASS for r in results)
+
+    def test_broken_head_tail_warn(
+        self, config: Config
+    ) -> None:
+        results = check_ecf_custom_head_tail(
+            CUSTOM_BROKEN, config
+        )
+        assert len(results) == 2
+        assert all(r.status == Status.WARN for r in results)
+
+    def test_no_include_dir_empty(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        assert check_ecf_custom_head_tail(tmp_path, config) == []
+
+    def test_no_head_file_skipped(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        inc = tmp_path / "include"
+        inc.mkdir()
+        # Only tail.h, no head.h
+        (inc / "tail.h").write_text("ecflow_client --complete\n")
+        results = check_ecf_custom_head_tail(tmp_path, config)
+        assert len(results) == 1
+        assert results[0].rule_id == "R2OECF006"
+
+
+# ── R2OECF005 config integration ─────────────────────────────
+
+
+class TestHardcodedPathsConfig:
+    def test_custom_prefixes(
+        self, tmp_path: Path
+    ) -> None:
+        """Config overrides hardcoded path prefixes."""
+        from r2o_check.config import Config, EcflowConfig
+
+        ecf = tmp_path / "ecf"
+        ecf.mkdir()
+        (ecf / "test.ecf").write_text(
+            "#!/bin/bash\n"
+            "cp /custom/data/input.dat $DATA/\n"
+        )
+        config = Config(
+            ecflow=EcflowConfig(
+                hardcoded_path_prefixes=["/custom/"]
+            )
+        )
+        results = check_ecf_hardcoded_paths(tmp_path, config)
+        warns = [r for r in results if r.status == Status.WARN]
+        assert len(warns) == 1
+
+    def test_default_prefixes_ignore_custom(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """Default prefixes don't flag /custom/."""
+        ecf = tmp_path / "ecf"
+        ecf.mkdir()
+        (ecf / "test.ecf").write_text(
+            "#!/bin/bash\ncp /custom/data/in.dat $DATA/\n"
+        )
+        results = check_ecf_hardcoded_paths(tmp_path, config)
+        assert all(r.status == Status.PASS for r in results)

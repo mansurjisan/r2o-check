@@ -66,3 +66,43 @@ def test_lint_shows_naming_rules() -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["lint", str(COMPLIANT)])
     assert "R2ONAM001" in result.output
+
+
+def test_lint_json_format() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["lint", str(COMPLIANT), "--format", "json"]
+    )
+    assert result.exit_code == 0
+    assert '"version"' in result.output
+    assert '"results"' in result.output
+
+
+def test_lint_markdown_format() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["lint", str(COMPLIANT), "--format", "markdown"]
+    )
+    assert result.exit_code == 0
+    assert "## r2o-check" in result.output
+
+
+def test_lint_html_format() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["lint", str(COMPLIANT), "--format", "html"]
+    )
+    assert result.exit_code == 0
+    assert "<!DOCTYPE html>" in result.output
+
+
+def test_lint_output_to_file(tmp_path: Path) -> None:
+    out = tmp_path / "report.json"
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["lint", str(COMPLIANT), "--format", "json", "-o", str(out)],
+    )
+    assert result.exit_code == 0
+    assert out.exists()
+    assert '"version"' in out.read_text()
