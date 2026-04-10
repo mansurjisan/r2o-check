@@ -101,8 +101,14 @@ def check_exscript_naming(
         return []
 
     results: list[LintResult] = []
-    for f in sorted(scripts_dir.iterdir()):
+    # Recurse into scripts/ and subdirectories.
+    # Only flag files whose name starts with 'ex' — these
+    # are intended to be ex-scripts. Non-ex files (helpers,
+    # utilities) are not checked by this rule.
+    for f in sorted(scripts_dir.rglob("*")):
         if not f.is_file():
+            continue
+        if not f.name.startswith("ex"):
             continue
         if _EXSCRIPT_PATTERN.match(f.name):
             results.append(LintResult(
@@ -126,6 +132,63 @@ def check_exscript_naming(
                 path=f,
                 fix_hint=(
                     "Rename to match exmodel_task.sh pattern."
+                ),
+            ))
+    return results
+
+
+@register_rule(applies_to=MODEL_REPO_TYPES)
+def check_ush_naming(
+    repo_path: Path, config: Config
+) -> list[LintResult]:
+    """R2ONAM005 — Validate ush/ script naming conventions.
+
+    NCO v11.0 Section IV.C: ush scripts must be all lowercase,
+    must not begin with 'ex', and must end with .sh, .pl, or .py.
+    """
+    ush_dir = repo_path / "ush"
+    if not ush_dir.is_dir():
+        return []
+
+    results: list[LintResult] = []
+    for f in sorted(ush_dir.rglob("*")):
+        if not f.is_file():
+            continue
+        name = f.name
+        has_valid_ext = _USH_PATTERN.match(name) is not None
+        starts_with_ex = name.startswith("ex")
+        is_lowercase = name == name.lower()
+
+        if has_valid_ext and not starts_with_ex and is_lowercase:
+            results.append(LintResult(
+                status=Status.PASS,
+                rule_id="R2ONAM005",
+                message=(
+                    f"Ush script '{name}' follows naming."
+                    " [NCO v11.0 IV.C]"
+                ),
+                path=f,
+            ))
+        else:
+            parts: list[str] = []
+            if not is_lowercase:
+                parts.append("must be lowercase")
+            if starts_with_ex:
+                parts.append("must not start with 'ex'")
+            if not has_valid_ext:
+                parts.append("must end with .sh/.pl/.py")
+            reason = "; ".join(parts)
+            results.append(LintResult(
+                status=Status.WARN,
+                rule_id="R2ONAM005",
+                message=(
+                    f"Ush script '{name}': {reason}."
+                    " [NCO v11.0 IV.C]"
+                ),
+                path=f,
+                fix_hint=(
+                    "Rename to lowercase, no 'ex' prefix,"
+                    " with .sh/.pl/.py extension."
                 ),
             ))
     return results

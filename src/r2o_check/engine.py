@@ -58,6 +58,21 @@ MODEL_REPO_TYPES: list[RepoType] = [
     RepoType.WORKFLOW,
 ]
 
+# Repos that build compiled code.
+BUILD_REPO_TYPES: list[RepoType] = [
+    RepoType.OPERATIONAL_MODEL,
+    RepoType.WORKFLOW,
+    RepoType.MODEL_SOURCE,
+    RepoType.LIBRARY,
+]
+
+# Repos that have modulefiles.
+MODULE_REPO_TYPES: list[RepoType] = [
+    RepoType.OPERATIONAL_MODEL,
+    RepoType.WORKFLOW,
+    RepoType.MODEL_SOURCE,
+]
+
 
 @overload
 def register_rule(func: RuleFunc) -> RuleFunc: ...
@@ -103,6 +118,10 @@ def get_registered_rules() -> dict[str, RuleEntry]:
 RULE_MODULES: list[str] = [
     "r2o_check.rules.structure",
     "r2o_check.rules.naming",
+    "r2o_check.rules.environment",
+    "r2o_check.rules.build",
+    "r2o_check.rules.modules",
+    "r2o_check.rules.versions",
 ]
 
 
