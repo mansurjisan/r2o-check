@@ -10,8 +10,9 @@ Single sentence: "nf-core lint for NOAA operational model delivery."
 ## Architecture Principles
 1. **Rule-based engine**: each NCO requirement is an independently testable Python function
    returning a LintResult (pass/warn/fail + message + fix suggestion).
-2. **Config-driven**: `.r2o-check.yml` lets projects disable rules, pin standards version,
-   and declare variants.
+2. **Config-driven**: `.r2o-check.yml` lets projects declare `repo_type` (operational_model,
+   workflow, tool, library, model_source), disable rules, pin standards version, and
+   declare variants. Rules declare which repo types they apply to.
 3. **No heavy dependencies for core lint**: do NOT require the ecFlow Python library for
    basic lint — parse .ecf files as text. ecFlow lib is optional for deep validation.
 4. **Multiple output formats**: rich CLI table (default), JSON, Markdown (PR comments), HTML.
@@ -41,7 +42,7 @@ Deliverables:
 - `src/r2o_check/engine.py`: `LintResult` dataclass (status, rule_id, message, path, fix_hint),
   `LintRunner` class that discovers and runs rules
 - `src/r2o_check/config.py`: loads `.r2o-check.yml` with schema validation
-- `src/r2o_check/rules/structure.py`: 8 directory checks mapped to NCO v11.0 §4
+- `src/r2o_check/rules/structure.py`: 8 directory checks mapped to NCO v11.0 §VI.B Table 3
   (ecf/, jobs/, scripts/, ush/, sorc/, modulefiles/, versions/, parm/)
 - `src/r2o_check/cli.py`: `r2o-check lint <path>` with rich table output
 - `src/r2o_check/formatters/cli_table.py`: rich-based table formatter
@@ -50,16 +51,32 @@ Deliverables:
 - `tests/test_structure.py`: pytest tests for every structure rule
 - Working end-to-end: `pip install -e . && r2o-check lint tests/fixtures/compliant_minimal`
 
-### Phase 2 — Naming convention checks (~1 week)
-- `src/r2o_check/rules/naming.py`: J-job pattern `J<MODEL>_<TASK>`, ex-script pattern
-  `ex<model>_<task>.sh`, modulefile naming, versions/ file naming
+### Phase 2 — Naming conventions, conditional structure, and repo_type (~1 week)
+- **Introduce `repo_type` to config.** Add `repo_type: operational_model | workflow | tool |
+  library | model_source` field to `.r2o-check.yml` (default: `operational_model`). Each rule's
+  `@register_rule` decorator takes an `applies_to: list[RepoType]` parameter; the runner skips
+  rules whose `applies_to` doesn't include the current repo's type. Existing structure rules
+  (R2OSTR001–008) apply to `[operational_model, workflow]`. The r2o-check repo's own
+  `.r2o-check.yml` sets `repo_type: tool`, and self-check then passes by virtue of having no
+  applicable rules — which is correct behavior, not a workaround.
+- **Extend structure rules with 6 conditional directories** (R2OSTR009–R2OSTR014) at WARN
+  severity by default, with conditional FAIL escalation documented per rule. Directories:
+  `doc/`, `exec/`, `fix/`, `lib/`, `gempak/`, `parm/wmo/` per NCO v11.0 §VI.B Table 3.
+  Each rule documents the condition under which the directory becomes mandatory (e.g.,
+  `exec/` becomes FAIL if `sorc/` contains Fortran sources but `exec/` is missing).
+- `src/r2o_check/rules/naming.py`: J-job pattern `J<MODEL>_<TASK>` (NCO v11.0 §IV.C),
+  ex-script pattern `ex<model>_<task>.sh` (NCO v11.0 §IV.C), modulefile naming,
+  versions/ file naming
 - Tests against RRFS-workflow and STOFS-operational naming patterns (as fixtures, not live repos)
+- Self-check: `.r2o-check.yml` at repo root with `repo_type: tool`, CI job runs
+  `r2o-check lint .` and fails if it errors
 
 ### Phase 3 — Environment + module + build checks (~1 week)
-- `src/r2o_check/rules/environment.py`: parse J-jobs for required env vars from NCO Table 1
-  (HOMEmodel, COMROOT, DATAROOT, etc. — enumerate all ~30)
+- `src/r2o_check/rules/environment.py`: parse J-jobs for required env vars from NCO v11.0
+  §III.A Table 1 (HOMEmodel, COMROOT, DATAROOT, etc. — enumerate all ~30)
 - `src/r2o_check/rules/modules.py`: modulefile structure (compiler, MPI, libs declared)
-- `src/r2o_check/rules/build.py`: Makefile must have targets: all, debug, install, clean
+- `src/r2o_check/rules/build.py`: Makefile must have targets per NCO v11.0 §VI.A.8:
+  all, debug, install, clean
 - `src/r2o_check/rules/versions.py`: versions/run.ver and versions/build.ver format
 
 ### Phase 4 — ecFlow validation (~1-2 weeks)
@@ -114,6 +131,7 @@ NCO standards section reference, rationale, example failure, example fix.
 ## Definition of Done for Each Phase
 1. All new rules documented in docs/rules.md
 2. Unit tests passing with >85% coverage on new code
-3. Self-check (r2o-check lint .) passes or has only intentional warnings
+3. Self-check (`r2o-check lint .`) passes — r2o-check repo uses `repo_type: tool` so
+   only tool-applicable rules run (correct behavior, not a workaround)
 4. CHANGELOG.md updated
 5. Phase branch merged to main with a descriptive commit
