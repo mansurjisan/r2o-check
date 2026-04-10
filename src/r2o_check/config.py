@@ -20,32 +20,64 @@ class RepoType(Enum):
     MODEL_SOURCE = "model_source"
 
 
-DEFAULTS: dict[str, Any] = {
-    "standards_version": "11.0.0",
-    "repo_type": RepoType.OPERATIONAL_MODEL.value,
-    "disabled_rules": [],
-    "variants": {},
-}
+# Default hardcoded path prefixes for R2OECF005.
+DEFAULT_HARDCODED_PATHS: list[str] = [
+    "/lfs/",
+    "/work/",
+    "/scratch/",
+    "/gpfs/",
+    "/lustre/",
+    "/contrib/",
+    "/home/",
+]
 
-VALID_KEYS = {
+VALID_TOP_KEYS = {
     "standards_version",
     "repo_type",
     "disabled_rules",
     "variants",
+    "ecflow",
 }
 
-# Accepted string values for repo_type.
 _REPO_TYPE_VALUES = {rt.value for rt in RepoType}
+
+
+@dataclass
+class EcflowConfig:
+    """Namespaced config for ecFlow rules."""
+
+    hardcoded_path_prefixes: list[str] = field(
+        default_factory=lambda: list(DEFAULT_HARDCODED_PATHS)
+    )
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EcflowConfig:
+        """Parse ecflow config section."""
+        prefixes = data.get(
+            "hardcoded_path_prefixes",
+            DEFAULT_HARDCODED_PATHS,
+        )
+        if not isinstance(prefixes, list) or not all(
+            isinstance(p, str) for p in prefixes
+        ):
+            raise ValueError(
+                "ecflow.hardcoded_path_prefixes must be"
+                " a list of strings"
+            )
+        return cls(hardcoded_path_prefixes=prefixes)
 
 
 @dataclass
 class Config:
     """Parsed and validated project configuration."""
 
-    standards_version: str = DEFAULTS["standards_version"]
+    standards_version: str = "11.0.0"
     repo_type: RepoType = RepoType.OPERATIONAL_MODEL
     disabled_rules: list[str] = field(default_factory=list)
     variants: dict[str, Any] = field(default_factory=dict)
+    ecflow: EcflowConfig = field(
+        default_factory=EcflowConfig
+    )
 
     @classmethod
     def from_file(cls, path: Path) -> Config:
@@ -64,7 +96,7 @@ class Config:
 
     @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> Config:
-        unknown = set(data.keys()) - VALID_KEYS
+        unknown = set(data.keys()) - VALID_TOP_KEYS
         if unknown:
             keys = ", ".join(sorted(unknown))
             raise ValueError(
@@ -72,13 +104,15 @@ class Config:
             )
 
         standards_version = data.get(
-            "standards_version", DEFAULTS["standards_version"]
+            "standards_version", "11.0.0"
         )
         if not isinstance(standards_version, str):
-            raise ValueError("standards_version must be a string")
+            raise ValueError(
+                "standards_version must be a string"
+            )
 
         repo_type_str = data.get(
-            "repo_type", DEFAULTS["repo_type"]
+            "repo_type", RepoType.OPERATIONAL_MODEL.value
         )
         if not isinstance(repo_type_str, str):
             raise ValueError("repo_type must be a string")
@@ -101,11 +135,17 @@ class Config:
         if not isinstance(variants, dict):
             raise ValueError("variants must be a mapping")
 
+        ecflow_raw = data.get("ecflow", {})
+        if not isinstance(ecflow_raw, dict):
+            raise ValueError("ecflow must be a mapping")
+        ecflow = EcflowConfig.from_dict(ecflow_raw)
+
         return cls(
             standards_version=standards_version,
             repo_type=repo_type,
             disabled_rules=disabled_rules,
             variants=variants,
+            ecflow=ecflow,
         )
 
 

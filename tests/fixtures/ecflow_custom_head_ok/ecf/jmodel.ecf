@@ -1,0 +1,4 @@
+#!/bin/bash
+%include <head.h>
+$HOMEmodel/jobs/JMODEL
+%include <tail.h>

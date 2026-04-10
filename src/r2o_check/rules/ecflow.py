@@ -17,11 +17,8 @@ from r2o_check.engine import (
     register_rule,
 )
 
-# Hard-coded path prefixes to flag in R2OECF005.
-_HARDCODED_PATH_PREFIXES = (
-    "/lfs/", "/work/", "/scratch/", "/gpfs/",
-    "/lustre/", "/contrib/", "/home/",
-)
+# Default path prefixes now in config.py (EcflowConfig).
+# R2OECF005 reads from config.ecflow.hardcoded_path_prefixes.
 
 # Pattern: lines that are assignments (VAR=...) are excluded
 # from hardcoded path checks — it's valid to set a default.
@@ -324,7 +321,8 @@ def check_ecf_hardcoded_paths(
             if _ASSIGNMENT_LINE.match(stripped):
                 continue
             # Check for hard-coded paths.
-            for prefix in _HARDCODED_PATH_PREFIXES:
+            prefixes = config.ecflow.hardcoded_path_prefixes
+            for prefix in prefixes:
                 if prefix in stripped:
                     bad_lines.append(f"{name}:{i}")
                     break
@@ -354,4 +352,88 @@ def check_ecf_hardcoded_paths(
                 ),
                 path=ef,
             ))
+    return results
+
+
+@register_rule(applies_to=MODEL_REPO_TYPES)
+def check_ecf_custom_head_tail(
+    repo_path: Path, config: Config
+) -> list[LintResult]:
+    """R2OECF006 — Verify custom head.h/tail.h content.
+
+    If include/head.h or include/tail.h exists in the repo,
+    parse them to verify they contain ecflow_client --init
+    and --complete. Skip when files don't exist (standard
+    NCO head/tail presumed correct).
+    """
+    results: list[LintResult] = []
+    include_dir = repo_path / "include"
+    if not include_dir.is_dir():
+        return []
+
+    head = include_dir / "head.h"
+    tail = include_dir / "tail.h"
+
+    if head.is_file():
+        content = head.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        if "ecflow_client --init" in content:
+            results.append(LintResult(
+                status=Status.PASS,
+                rule_id="R2OECF006",
+                message=(
+                    "include/head.h contains"
+                    " ecflow_client --init."
+                    " [NCO v11.0 II]"
+                ),
+                path=head,
+            ))
+        else:
+            results.append(LintResult(
+                status=Status.WARN,
+                rule_id="R2OECF006",
+                message=(
+                    "Custom include/head.h missing"
+                    " ecflow_client --init."
+                    " [NCO v11.0 II]"
+                ),
+                path=head,
+                fix_hint=(
+                    "Add ecflow_client --init to head.h"
+                    " or use standard NCO head.h."
+                ),
+            ))
+
+    if tail.is_file():
+        content = tail.read_text(
+            encoding="utf-8", errors="replace"
+        )
+        if "ecflow_client --complete" in content:
+            results.append(LintResult(
+                status=Status.PASS,
+                rule_id="R2OECF006",
+                message=(
+                    "include/tail.h contains"
+                    " ecflow_client --complete."
+                    " [NCO v11.0 II]"
+                ),
+                path=tail,
+            ))
+        else:
+            results.append(LintResult(
+                status=Status.WARN,
+                rule_id="R2OECF006",
+                message=(
+                    "Custom include/tail.h missing"
+                    " ecflow_client --complete."
+                    " [NCO v11.0 II]"
+                ),
+                path=tail,
+                fix_hint=(
+                    "Add ecflow_client --complete to"
+                    " tail.h or use standard NCO tail.h."
+                ),
+            ))
+
     return results
