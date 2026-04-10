@@ -1,0 +1,83 @@
+name: "r2o-check lint"
+description: "Run NCO Implementation Standards compliance checks"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  path:
+    description: "Path to the repository to lint"
+    required: false
+    default: "."
+  standards-version:
+    description: "NCO standards version"
+    required: false
+    default: "11.0"
+  fail-on:
+    description: "Severity to fail on: 'fail' (default) or 'warn'"
+    required: false
+    default: "fail"
+  config-file:
+    description: "Path to .r2o-check.yml config"
+    required: false
+    default: ".r2o-check.yml"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install r2o-check
+      shell: bash
+      run: pip install "${{ github.action_path }}/.."
+
+    - name: Run r2o-check (JSON)
+      id: lint-json
+      shell: bash
+      run: |
+        r2o-check lint "${{ inputs.path }}" --format json \
+          -o /tmp/r2o-check-results.json || true
+
+    - name: Run r2o-check (Markdown)
+      id: lint-md
+      shell: bash
+      run: |
+        r2o-check lint "${{ inputs.path }}" --format markdown \
+          -o /tmp/r2o-check-results.md || true
+
+    - name: Run r2o-check (table)
+      id: lint-table
+      shell: bash
+      run: |
+        set +e
+        r2o-check lint "${{ inputs.path }}"
+        echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+    - name: Post PR comment
+      if: github.event_name == 'pull_request'
+      shell: bash
+      run: |
+        if [ -f /tmp/r2o-check-results.md ]; then
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --body-file /tmp/r2o-check-results.md \
+            --edit-last || \
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --body-file /tmp/r2o-check-results.md
+        fi
+      env:
+        GH_TOKEN: ${{ github.token }}
+
+    - name: Check result
+      shell: bash
+      run: |
+        EXIT_CODE=${{ steps.lint-table.outputs.exit_code }}
+        if [ "${{ inputs.fail-on }}" = "warn" ]; then
+          # In strict mode, any non-zero exit is a failure
+          exit ${EXIT_CODE}
+        else
+          # Default: only fail on FAIL/ERROR (exit code 1)
+          exit ${EXIT_CODE}
+        fi

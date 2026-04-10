@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, "phase-*"]
+    branches: [main, master, "phase-*"]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   lint-and-test:
@@ -33,7 +33,21 @@ jobs:
         run: mypy
 
       - name: Pytest with coverage
-        run: pytest --cov=r2o_check --cov-report=term-missing --cov-fail-under=85
+        run: |
+          pytest --cov=r2o_check --cov-report=term-missing \
+            --cov-fail-under=85
 
-      - name: Self-check
+      - name: Self-check (CLI)
         run: r2o-check lint .
+
+      - name: Self-check (JSON format)
+        run: r2o-check lint . --format json
+
+  action-self-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run r2o-check action
+        uses: ./action
+        with:
+          path: "."
