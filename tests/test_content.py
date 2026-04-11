@@ -1,0 +1,155 @@
+"""Tests for content validation rules (R2OCNT001-004)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from r2o_check.config import Config
+from r2o_check.engine import Status
+from r2o_check.rules.content import (
+    check_err_chk_usage,
+    check_jjob_debug_settings,
+    check_no_background_procs,
+    check_shebang,
+)
+
+FIXTURES = Path(__file__).parent / "fixtures"
+RRFS = FIXTURES / "rrfs_style"
+
+
+@pytest.fixture
+def config() -> Config:
+    return Config()
+
+
+class TestDebugSettings:
+    def test_rrfs_has_set_x(self, config: Config) -> None:
+        results = check_jjob_debug_settings(RRFS, config)
+        forecast = [
+            r for r in results if "JRRFS_FORECAST" in r.message
+        ]
+        assert forecast[0].status == Status.PASS
+
+    def test_missing_set_x(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL").write_text("#!/bin/bash\necho hi\n")
+        results = check_jjob_debug_settings(tmp_path, config)
+        assert results[0].status == Status.FAIL
+        assert "set -x" in results[0].message
+
+    def test_no_jobs_dir(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        assert check_jjob_debug_settings(tmp_path, config) == []
+
+
+class TestErrChk:
+    def test_no_exec_calls_skipped(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "exmodel_task.sh").write_text(
+            "#!/bin/bash\necho done\n"
+        )
+        results = check_err_chk_usage(tmp_path, config)
+        assert results == []
+
+    def test_exec_with_err_chk_passes(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "exmodel_task.sh").write_text(
+            "#!/bin/bash\n"
+            "$EXECmodel/model.x\n"
+            "export err=$?; err_chk\n"
+        )
+        results = check_err_chk_usage(tmp_path, config)
+        assert results[0].status == Status.PASS
+
+    def test_exec_without_err_chk_warns(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "exmodel_task.sh").write_text(
+            "#!/bin/bash\n$EXECmodel/model.x\n"
+        )
+        results = check_err_chk_usage(tmp_path, config)
+        assert results[0].status == Status.WARN
+
+
+class TestShebang:
+    def test_with_shebang_passes(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL").write_text("#!/bin/bash\nset -x\n")
+        results = check_shebang(tmp_path, config)
+        passes = [r for r in results if r.status == Status.PASS]
+        assert len(passes) >= 1
+
+    def test_missing_shebang_fails(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL").write_text("set -x\necho hi\n")
+        results = check_shebang(tmp_path, config)
+        fails = [r for r in results if r.status == Status.FAIL]
+        assert len(fails) >= 1
+        assert "shebang" in fails[0].message
+
+    def test_no_dirs_empty(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        assert check_shebang(tmp_path, config) == []
+
+
+class TestNoBackground:
+    def test_clean_script_passes(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL").write_text(
+            "#!/bin/bash\nset -x\necho done\n"
+        )
+        results = check_no_background_procs(tmp_path, config)
+        passes = [r for r in results if r.status == Status.PASS]
+        assert len(passes) >= 1
+
+    def test_background_detected(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "exmodel_task.sh").write_text(
+            "#!/bin/bash\n"
+            "$EXECmodel/model.x &\n"
+            "wait\n"
+        )
+        results = check_no_background_procs(tmp_path, config)
+        warns = [r for r in results if r.status == Status.WARN]
+        assert len(warns) >= 1
+        assert "background" in warns[0].message
+
+    def test_ampersand_in_and_not_flagged(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """&& should not be flagged as background."""
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL").write_text(
+            "#!/bin/bash\nmkdir -p $DATA && cd $DATA\n"
+        )
+        results = check_no_background_procs(tmp_path, config)
+        passes = [r for r in results if r.status == Status.PASS]
+        assert len(passes) >= 1

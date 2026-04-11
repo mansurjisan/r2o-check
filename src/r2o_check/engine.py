@@ -132,6 +132,7 @@ RULE_MODULES: list[str] = [
     "r2o_check.rules.versions",
     "r2o_check.rules.ecflow",
     "r2o_check.rules.crossref",
+    "r2o_check.rules.content",
 ]
 
 
