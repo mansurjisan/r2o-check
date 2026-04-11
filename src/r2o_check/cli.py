@@ -13,6 +13,7 @@ from r2o_check.formatters.cli_table import format_results
 from r2o_check.formatters.html import format_results_html
 from r2o_check.formatters.json_report import format_results_json
 from r2o_check.formatters.markdown import format_results_markdown
+from r2o_check.formatters.sarif import format_results_sarif
 
 
 @click.group()
@@ -31,7 +32,7 @@ def main() -> None:
 @click.option(
     "--format",
     "fmt",
-    type=click.Choice(["table", "json", "markdown", "html"]),
+    type=click.Choice(["table", "json", "markdown", "html", "sarif"]),
     default="table",
     help="Output format (default: table).",
 )
@@ -77,6 +78,9 @@ def lint(
         _write_output(text, output_file)
     elif fmt == "html":
         text = format_results_html(results, config)
+        _write_output(text, output_file)
+    elif fmt == "sarif":
+        text = format_results_sarif(results, config)
         _write_output(text, output_file)
     else:
         console = Console()
@@ -141,6 +145,76 @@ def fix(path: str, apply_fixes: bool) -> None:
         console.print(
             "Run with --apply to apply fixes."
         )
+
+
+@main.command()
+@click.argument(
+    "path",
+    type=click.Path(resolve_path=True),
+    default=".",
+)
+def init(path: str) -> None:
+    """Initialize a repo for r2o-check compliance."""
+    from r2o_check.config import RepoType
+    from r2o_check.fixers.structure import fix_missing_directories
+    from r2o_check.fixers.versions import fix_missing_version_files
+
+    repo_path = Path(path)
+    repo_path.mkdir(parents=True, exist_ok=True)
+    console = Console()
+    console.print("[bold]r2o-check init[/bold]\n")
+
+    # Ask repo type.
+    type_map = {str(i): rt for i, rt in enumerate(RepoType, 1)}
+    console.print("Select repo type:")
+    for num, rt in type_map.items():
+        console.print(f"  {num}) {rt.value}")
+    choice = click.prompt(
+        "Choice", type=click.Choice(list(type_map.keys())),
+        default="1",
+    )
+    repo_type = type_map[choice]
+
+    # Write .r2o-check.yml.
+    config_path = repo_path / ".r2o-check.yml"
+    if config_path.exists():
+        console.print(
+            "[yellow].r2o-check.yml already exists[/yellow]"
+        )
+    else:
+        config_path.write_text(
+            f'repo_type: {repo_type.value}\n'
+            f'standards_version: "11.0.0"\n',
+            encoding="utf-8",
+        )
+        console.print(
+            f"[green]Created .r2o-check.yml"
+            f" (repo_type: {repo_type.value})[/green]"
+        )
+
+    # Scaffold directories.
+    if repo_type in (
+        RepoType.OPERATIONAL_MODEL, RepoType.WORKFLOW
+    ):
+        actions = fix_missing_directories(
+            repo_path, dry_run=False
+        )
+        actions.extend(
+            fix_missing_version_files(
+                repo_path, dry_run=False
+            )
+        )
+        for a in actions:
+            console.print(
+                f"  [green]Created[/green] {a.description}"
+            )
+        if not actions:
+            console.print(
+                "  All directories already exist."
+            )
+
+    console.print("\n[bold]Done![/bold] Run"
+                  " 'r2o-check lint .' to check compliance.")
 
 
 def _write_output(text: str, output_file: str | None) -> None:

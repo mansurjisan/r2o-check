@@ -156,6 +156,20 @@ class LintRunner:
         """Check if a rule applies to the current repo type."""
         return self.config.repo_type in entry.applies_to
 
+    def _is_suppressed(self, result: LintResult) -> bool:
+        """Check if a result is suppressed by inline comment."""
+        if result.path is None or not result.path.is_file():
+            return False
+        try:
+            content = result.path.read_text(
+                encoding="utf-8", errors="replace"
+            )
+        except Exception:
+            return False
+        # Look for: # r2o-check:disable=RULE_ID
+        marker = f"r2o-check:disable={result.rule_id}"
+        return marker in content
+
     def _apply_override(self, result: LintResult) -> LintResult:
         """Apply severity override from config if present."""
         overrides = self.config.severity_overrides
@@ -209,14 +223,14 @@ class LintRunner:
                 ]
             has_pass = False
             for result in rule_results:
-                if result.rule_id not in (
-                    self.config.disabled_rules
-                ):
-                    # Apply severity overrides.
-                    result = self._apply_override(result)
-                    results.append(result)
-                    if result.status == Status.PASS:
-                        has_pass = True
+                if result.rule_id in self.config.disabled_rules:
+                    continue
+                if self._is_suppressed(result):
+                    continue
+                result = self._apply_override(result)
+                results.append(result)
+                if result.status == Status.PASS:
+                    has_pass = True
             # Only mark as "ran" if it produced PASS results
             # (not just warnings about missing files).
             if has_pass:
