@@ -61,12 +61,18 @@ def format_results_markdown(
         f"| Total |"
     )
     lines.append("|---|---|---|---|")
+    score = (
+        round(100 * counts[Status.PASS] / len(results))
+        if results else 100
+    )
     lines.append(
         f"| {counts[Status.PASS]} "
         f"| {counts[Status.WARN]} "
         f"| {counts[Status.FAIL]} "
         f"| {len(results)} |"
     )
+    lines.append("")
+    lines.append(f"**Compliance score: {score}%**\n")
     lines.append("")
 
     if not include_passes and counts[Status.PASS] > 0:

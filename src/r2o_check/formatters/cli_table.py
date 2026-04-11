@@ -55,7 +55,20 @@ def format_results(results: list[LintResult], console: Console | None = None) ->
     if counts[Status.ERROR]:
         parts.append(f"[bold red]{counts[Status.ERROR]} errors[/bold red]")
 
-    console.print("\n" + ", ".join(parts))
+    # Compliance score.
+    total = len(results)
+    passed = counts[Status.PASS]
+    score = round(100 * passed / total) if total else 100
+    score_color = (
+        "green" if score >= 90
+        else "yellow" if score >= 70
+        else "red"
+    )
+
+    console.print(
+        "\n" + ", ".join(parts)
+        + f"  [{score_color}]({score}% compliant)[/{score_color}]"
+    )
 
     has_failures = counts[Status.FAIL] > 0 or counts[Status.ERROR] > 0
     return 1 if has_failures else 0

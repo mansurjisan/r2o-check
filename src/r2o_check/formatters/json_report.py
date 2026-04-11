@@ -28,6 +28,10 @@ def format_results_json(
             "fail": counts[Status.FAIL],
             "error": counts[Status.ERROR],
             "total": len(results),
+            "compliance_score": (
+                round(100 * counts[Status.PASS] / len(results))
+                if results else 100
+            ),
         },
         "results": [
             {
