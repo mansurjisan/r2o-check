@@ -31,7 +31,7 @@ _USH_CALL = re.compile(
 
 
 def _collect_scripts(
-    base: Path, name_filter: "re.Pattern[str] | None" = None,
+    base: Path, name_filter: re.Pattern[str] | None = None,
     prefix: str | None = None,
 ) -> dict[str, Path]:
     """Return {posix_relpath: Path} for files under ``base``."""

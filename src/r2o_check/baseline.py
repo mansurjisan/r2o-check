@@ -9,10 +9,10 @@ baseline is portable across checkout locations.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
 
 from r2o_check.engine import LintResult, Status
 
@@ -48,7 +48,7 @@ class Baseline:
     version: int = BASELINE_VERSION
 
     @classmethod
-    def empty(cls) -> "Baseline":
+    def empty(cls) -> Baseline:
         return cls(
             fingerprints=set(),
             created=datetime.now(timezone.utc).isoformat(),
@@ -59,7 +59,7 @@ class Baseline:
         cls,
         results: Iterable[LintResult],
         repo_path: Path,
-    ) -> "Baseline":
+    ) -> Baseline:
         fps = {
             fingerprint(r, repo_path)
             for r in results
@@ -71,7 +71,7 @@ class Baseline:
         )
 
     @classmethod
-    def load(cls, path: Path) -> "Baseline":
+    def load(cls, path: Path) -> Baseline:
         data = json.loads(path.read_text(encoding="utf-8"))
         version = data.get("version", 1)
         if version != BASELINE_VERSION:
