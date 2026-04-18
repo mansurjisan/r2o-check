@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from r2o_check._shell import strip_shell_comments
 from r2o_check.config import Config
 from r2o_check.engine import (
     MODEL_REPO_TYPES,
@@ -75,9 +76,9 @@ def check_jjob_core_vars(
     """
     results: list[LintResult] = []
     for jf in _iter_jjobs(repo_path):
-        content = jf.read_text(
+        content = strip_shell_comments(jf.read_text(
             encoding="utf-8", errors="replace"
-        )
+        ))
         for var, desc in JJOB_CORE_VARS:
             if _var_is_set(content, var):
                 results.append(LintResult(
@@ -121,9 +122,9 @@ def check_jjob_context_vars(
     """
     results: list[LintResult] = []
     for jf in _iter_jjobs(repo_path):
-        content = jf.read_text(
+        content = strip_shell_comments(jf.read_text(
             encoding="utf-8", errors="replace"
-        )
+        ))
         for prefix, desc in JJOB_CONTEXT_VARS:
             if _pattern_var_is_set(content, prefix):
                 results.append(LintResult(

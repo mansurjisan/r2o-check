@@ -106,3 +106,53 @@ def test_lint_output_to_file(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert out.exists()
     assert '"version"' in out.read_text()
+
+
+def test_lint_table_output_to_file(tmp_path: Path) -> None:
+    out = tmp_path / "report.txt"
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["lint", str(COMPLIANT), "-o", str(out)],
+    )
+    assert result.exit_code == 0
+    assert out.exists()
+    body = out.read_text()
+    assert "PASS" in body
+    assert "R2OSTR001" in body
+
+
+def test_fix_skips_scaffolding_for_tool_repo(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "toolproj"
+    repo.mkdir()
+    (repo / ".r2o-check.yml").write_text(
+        "repo_type: tool\n", encoding="utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["fix", str(repo), "--apply"])
+    assert result.exit_code == 0
+    for d in (
+        "ecf", "jobs", "scripts", "ush", "sorc",
+        "parm", "modulefiles", "versions",
+    ):
+        assert not (repo / d).exists(), (
+            f"fix should not scaffold '{d}/' for tool repos"
+        )
+    assert "tool" in result.output
+
+
+def test_fix_scaffolds_for_operational_model(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "opmodel"
+    repo.mkdir()
+    (repo / ".r2o-check.yml").write_text(
+        "repo_type: operational_model\n", encoding="utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["fix", str(repo), "--apply"])
+    assert result.exit_code == 0
+    assert (repo / "ecf").is_dir()
+    assert (repo / "jobs").is_dir()

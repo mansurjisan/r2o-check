@@ -13,6 +13,7 @@ from r2o_check.rules.content import (
     check_jjob_debug_settings,
     check_no_background_procs,
     check_shebang,
+    check_working_dir_hygiene,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -46,6 +47,38 @@ class TestDebugSettings:
         self, tmp_path: Path, config: Config
     ) -> None:
         assert check_jjob_debug_settings(tmp_path, config) == []
+
+
+class TestCommentStripping:
+    def test_commented_set_x_does_not_pass(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL").write_text(
+            "#!/bin/bash\n"
+            "# set -x\n"
+            "# export PS4='+ $SECONDS + '\n"
+        )
+        results = check_jjob_debug_settings(tmp_path, config)
+        assert results[0].status == Status.FAIL
+
+    def test_commented_keepdata_does_not_pass(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL").write_text(
+            "#!/bin/bash\n"
+            "# KEEPDATA used to be set here\n"
+        )
+        results = check_working_dir_hygiene(tmp_path, config)
+        warns = [
+            r for r in results
+            if r.status == Status.WARN
+            and "KEEPDATA" in r.message
+        ]
+        assert len(warns) == 1
 
 
 class TestErrChk:

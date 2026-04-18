@@ -59,6 +59,39 @@ class TestCoreVars:
         assert all(r.status == Status.FAIL for r in missing)
 
 
+class TestCommentStripping:
+    def test_commented_core_var_does_not_pass(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL_TASK").write_text(
+            "#!/bin/bash\n"
+            "# export NET=rrfs\n"
+            "  # export RUN=rrfs\n"
+        )
+        results = check_jjob_core_vars(tmp_path, config)
+        fails = [
+            r for r in results
+            if r.status == Status.FAIL
+            and ("$NET" in r.message or "$RUN" in r.message)
+        ]
+        assert len(fails) == 2
+
+    def test_inline_comment_after_assignment_still_passes(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        jobs.mkdir()
+        (jobs / "JMODEL_TASK").write_text(
+            "#!/bin/bash\n"
+            "export NET=rrfs  # the network name\n"
+        )
+        results = check_jjob_core_vars(tmp_path, config)
+        net_results = [r for r in results if "$NET" in r.message]
+        assert all(r.status == Status.PASS for r in net_results)
+
+
 class TestContextVars:
     def test_rrfs_forecast_sets_all_context(
         self, config: Config

@@ -10,6 +10,7 @@ import os
 import re
 from pathlib import Path
 
+from r2o_check._shell import strip_shell_comments
 from r2o_check.config import Config
 from r2o_check.engine import (
     MODEL_REPO_TYPES,
@@ -51,9 +52,9 @@ def check_jjob_debug_settings(
     for jf in sorted(jobs_dir.iterdir()):
         if not jf.is_file() or jf.name.startswith("."):
             continue
-        content = jf.read_text(
+        content = strip_shell_comments(jf.read_text(
             encoding="utf-8", errors="replace"
-        )
+        ))
         has_set_x = bool(re.search(r"\bset\s+-x\b", content))
         has_ps4 = "PS4" in content
 
@@ -115,9 +116,9 @@ def check_err_chk_usage(
     for sf in sorted(scripts_dir.rglob("ex*")):
         if not sf.is_file():
             continue
-        content = sf.read_text(
+        content = strip_shell_comments(sf.read_text(
             encoding="utf-8", errors="replace"
-        )
+        ))
         has_exec = bool(_EXEC_CALL.search(content))
         if not has_exec:
             continue
@@ -222,9 +223,9 @@ def check_no_background_procs(
     for dirname in ("jobs", "scripts", "ush"):
         d = repo_path / dirname
         for sf in _iter_shell_files(d):
-            content = sf.read_text(
+            content = strip_shell_comments(sf.read_text(
                 encoding="utf-8", errors="replace"
-            )
+            ))
             matches = _BACKGROUND_PROC.findall(content)
             if matches:
                 count = len(matches)
@@ -334,9 +335,9 @@ def check_production_utilities(
     for sf in sorted(scripts_dir.rglob("ex*")):
         if not sf.is_file():
             continue
-        content = sf.read_text(
+        content = strip_shell_comments(sf.read_text(
             encoding="utf-8", errors="replace"
-        )
+        ))
         name = sf.name
 
         # Check dbn_alert wrapped with SENDDBN.
@@ -416,9 +417,9 @@ def check_working_dir_hygiene(
         for jf in sorted(jobs_dir.iterdir()):
             if not jf.is_file() or jf.name.startswith("."):
                 continue
-            content = jf.read_text(
+            content = strip_shell_comments(jf.read_text(
                 encoding="utf-8", errors="replace"
-            )
+            ))
             if "KEEPDATA" in content:
                 results.append(LintResult(
                     status=Status.PASS,
@@ -448,9 +449,9 @@ def check_working_dir_hygiene(
     for dirname in ("jobs", "scripts", "ush"):
         d = repo_path / dirname
         for sf in _iter_shell_files(d):
-            content = sf.read_text(
+            content = strip_shell_comments(sf.read_text(
                 encoding="utf-8", errors="replace"
-            )
+            ))
             if _DANGEROUS_RM.search(content):
                 results.append(LintResult(
                     status=Status.FAIL,

@@ -20,9 +20,12 @@ from r2o_check.engine import (
 # Default path prefixes now in config.py (EcflowConfig).
 # R2OECF005 reads from config.ecflow.hardcoded_path_prefixes.
 
-# Pattern: lines that are assignments (VAR=...) are excluded
-# from hardcoded path checks — it's valid to set a default.
-_ASSIGNMENT_LINE = re.compile(r"^\s*\w+=")
+# Pattern: lines that are assignments (VAR=... or export VAR=...,
+# also readonly/declare/local/typeset) are excluded from hardcoded
+# path checks — it's valid to set a default.
+_ASSIGNMENT_LINE = re.compile(
+    r"^\s*(?:export|readonly|declare|local|typeset)?\s*\w+="
+)
 
 # PBS directive pattern: #PBS -<flag> <value>
 _PBS_DIRECTIVE = re.compile(r"^#PBS\s+-\w")

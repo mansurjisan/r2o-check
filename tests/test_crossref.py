@@ -73,6 +73,75 @@ class TestJjobExscriptExists:
         assert check_jjob_exscript_exists(tmp_path, config) == []
 
 
+class TestNestedPaths:
+    def test_nested_exscript_call_found(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        (tmp_path / "jobs").mkdir()
+        scripts = tmp_path / "scripts" / "forecast"
+        scripts.mkdir(parents=True)
+        (scripts / "exfoo.sh").touch()
+        (tmp_path / "jobs" / "JMODEL").write_text(
+            "#!/bin/bash\n$SCRIPTS/forecast/exfoo.sh\n"
+        )
+        results = check_jjob_exscript_exists(tmp_path, config)
+        assert len(results) == 1
+        assert results[0].status == Status.PASS
+
+    def test_nested_ush_call_found(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        scripts = tmp_path / "scripts"
+        ush_sub = tmp_path / "ush" / "helpers"
+        scripts.mkdir()
+        ush_sub.mkdir(parents=True)
+        (ush_sub / "go.sh").touch()
+        (scripts / "exmodel.sh").write_text(
+            "#!/bin/bash\n$USH/helpers/go.sh\n"
+        )
+        results = check_exscript_ush_exists(tmp_path, config)
+        assert any(r.status == Status.PASS for r in results)
+
+    def test_path_qualified_call_is_not_basename_matched(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        (tmp_path / "jobs").mkdir()
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        # real file is at the root, not under 'other/'
+        (scripts / "exfoo.sh").touch()
+        (tmp_path / "jobs" / "JMODEL").write_text(
+            "#!/bin/bash\n$SCRIPTS/other/exfoo.sh\n"
+        )
+        results = check_jjob_exscript_exists(tmp_path, config)
+        assert len(results) == 1
+        assert results[0].status == Status.FAIL
+
+    def test_nested_script_orphan_detected_by_path(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        scripts_a = tmp_path / "scripts"
+        scripts_b = tmp_path / "scripts" / "subdir"
+        jobs.mkdir()
+        scripts_a.mkdir()
+        scripts_b.mkdir()
+        # J-job only references the flat version.
+        (jobs / "JMODEL").write_text(
+            "#!/bin/bash\n$SCRIPTS/exfoo.sh\n"
+        )
+        (scripts_a / "exfoo.sh").touch()
+        (scripts_b / "exfoo.sh").touch()
+        results = check_orphan_scripts(tmp_path, config)
+        ex_results = [
+            r for r in results if "exfoo.sh" in r.message
+        ]
+        statuses = {(r.status, "subdir" in r.message) for r in ex_results}
+        # The subdir copy should be an orphan, the top-level one should pass.
+        assert (Status.PASS, False) in statuses
+        assert (Status.WARN, True) in statuses
+
+
 class TestEcfReferencesJjob:
     def test_rrfs_ecf_calls_jjob(
         self, config: Config

@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Comment stripping in shell-text rules**: `R2OENV001`, `R2OENV002`,
+  `R2OCNT001`, `R2OCNT002`, `R2OCNT004`, `R2OCNT006`, and `R2OCNT007` no
+  longer treat commented-out lines as compliance signals. Introduced
+  `r2o_check._shell.strip_shell_comments` which handles single/double
+  quoting and preserves the shebang.
+- **Cross-reference path matching (R2OXRF002, R2OXRF004, R2OXRF005)**:
+  the call regex now captures optional subdirectory segments, so
+  `${SCRIPTS}/sub/exfoo.sh` is recognised. Script identity uses the
+  repo-relative path, eliminating the false positives that occurred
+  when two scripts shared a basename. Orphan detection resolves each
+  call to a single script rather than doing a basename substring search.
+- **`r2o-check fix` honors `repo_type`**: scaffolding of `ecf/`, `jobs/`,
+  `scripts/`, etc. now only runs for `operational_model` and `workflow`
+  repos. `tool`, `library`, and `model_source` repos receive an explicit
+  "no auto-fixes apply" message instead of an operational layout.
+- **R2OECF005 export exemption**: the hardcoded-path rule now treats
+  `export VAR=/lfs/...`, `readonly VAR=...`, `declare`, `local`, and
+  `typeset` assignments as assignments, matching the rule's documented
+  intent.
+- **`lint -o` for the default table format**: table output is now
+  written to the given file (as plain text) instead of silently going
+  to stdout.
+
 ## [0.1.0] - 2026-04-10
 
 ### Added — Phase 6: Auto-fix, documentation, release prep

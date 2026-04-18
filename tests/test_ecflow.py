@@ -180,6 +180,20 @@ class TestEcfHardcodedPaths:
         results = check_ecf_hardcoded_paths(tmp_path, config)
         assert all(r.status == Status.PASS for r in results)
 
+    def test_export_assignment_excluded(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        """`export VAR=/lfs/...` is also an assignment."""
+        ecf = tmp_path / "ecf"
+        ecf.mkdir()
+        (ecf / "ok.ecf").write_text(
+            "#!/bin/bash\n"
+            "export DATA=/lfs/h1/tmp/$jobid\n"
+            "readonly TMP=/scratch/x\n"
+        )
+        results = check_ecf_hardcoded_paths(tmp_path, config)
+        assert all(r.status == Status.PASS for r in results)
+
     def test_no_ecf_returns_empty(
         self, tmp_path: Path, config: Config
     ) -> None:

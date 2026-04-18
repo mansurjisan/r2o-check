@@ -83,8 +83,20 @@ def lint(
         text = format_results_sarif(results, config)
         _write_output(text, output_file)
     else:
-        console = Console()
-        format_results(results, console)
+        if output_file:
+            with open(
+                output_file, "w", encoding="utf-8"
+            ) as fh:
+                console = Console(
+                    file=fh,
+                    force_terminal=False,
+                    color_system=None,
+                    width=120,
+                )
+                format_results(results, console)
+        else:
+            console = Console()
+            format_results(results, console)
 
     raise SystemExit(1 if has_failures else 0)
 
@@ -105,23 +117,35 @@ def lint(
 )
 def fix(path: str, apply_fixes: bool) -> None:
     """Auto-fix safe, unambiguous rule violations."""
+    from r2o_check.config import RepoType
     from r2o_check.fixers.structure import fix_missing_directories
     from r2o_check.fixers.versions import fix_missing_version_files
 
     repo_path = Path(path)
+    config = load_config(repo_path)
     dry_run = not apply_fixes
     mode = "DRY RUN" if dry_run else "APPLYING"
 
     console = Console()
     console.print(f"[bold]r2o-check fix ({mode})[/bold]\n")
 
+    scaffoldable = {
+        RepoType.OPERATIONAL_MODEL, RepoType.WORKFLOW,
+    }
     actions = []
-    actions.extend(
-        fix_missing_directories(repo_path, dry_run=dry_run)
-    )
-    actions.extend(
-        fix_missing_version_files(repo_path, dry_run=dry_run)
-    )
+    if config.repo_type in scaffoldable:
+        actions.extend(
+            fix_missing_directories(repo_path, dry_run=dry_run)
+        )
+        actions.extend(
+            fix_missing_version_files(repo_path, dry_run=dry_run)
+        )
+    else:
+        console.print(
+            f"No auto-fixes apply to repo_type"
+            f" '{config.repo_type.value}'."
+        )
+        return
 
     if not actions:
         console.print("[green]Nothing to fix![/green]")

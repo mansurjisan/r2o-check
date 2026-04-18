@@ -16,11 +16,63 @@ from r2o_check.engine import (
     register_rule,
 )
 
-# Pattern to find ex-script calls in J-jobs:
-# $SCRIPTSmodel/exmodel_task.sh or ${SCRIPTSmodel}/ex...
+# Pattern to find ex-script calls in J-jobs. Captures an optional
+# subdirectory path so $SCRIPTSmodel/sub/exfoo.sh is recognised.
 _EXSCRIPT_CALL = re.compile(
-    r"\$\{?\w+\}?/(ex[a-z][a-z0-9_]*\.(?:sh|pl|py))"
+    r"\$\{?\w+\}?/"
+    r"((?:[A-Za-z0-9_.-]+/)*ex[a-z][a-z0-9_]*\.(?:sh|pl|py))"
 )
+
+# Pattern: $USHmodel/script.sh or ${USHmodel}/sub/script.sh
+_USH_CALL = re.compile(
+    r"\$\{?\w+\}?/"
+    r"((?:[A-Za-z0-9_.-]+/)*(?!ex)[a-z][a-z0-9_]*\.(?:sh|pl|py))"
+)
+
+
+def _collect_scripts(
+    base: Path, name_filter: "re.Pattern[str] | None" = None,
+    prefix: str | None = None,
+) -> dict[str, Path]:
+    """Return {posix_relpath: Path} for files under ``base``."""
+    scripts: dict[str, Path] = {}
+    if not base.is_dir():
+        return scripts
+    for p in base.rglob("*"):
+        if not p.is_file() or p.name.startswith("."):
+            continue
+        if prefix is not None and not p.name.startswith(prefix):
+            continue
+        if name_filter is not None and not name_filter.search(p.name):
+            continue
+        rel = p.relative_to(base).as_posix()
+        scripts[rel] = p
+    return scripts
+
+
+def _resolve_call(
+    called: str, scripts: dict[str, Path]
+) -> Path | None:
+    """Resolve a captured call path against a repo-relative index.
+
+    - If the call includes a subdirectory, the exact relative path
+      must match.
+    - If only a basename is given, match it to a script whose
+      basename is unique. Ambiguous basename calls resolve to the
+      first match to preserve ``exists`` semantics.
+    """
+    if called in scripts:
+        return scripts[called]
+    if "/" in called:
+        return None
+    matches = [
+        (rel, p) for rel, p in scripts.items()
+        if Path(rel).name == called
+    ]
+    if not matches:
+        return None
+    matches.sort()
+    return matches[0][1]
 
 
 @register_rule(applies_to=MODEL_REPO_TYPES)
@@ -85,18 +137,17 @@ def check_jjob_exscript_exists(
     """R2OXRF002 — Check ex-scripts called from J-jobs exist.
 
     Parse J-job files for ex-script calls and verify the
-    referenced scripts exist in scripts/.
+    referenced scripts exist in scripts/. Calls with
+    explicit subdirectory paths (``$SCRIPTS/sub/exfoo.sh``)
+    must match by relative path; bare basenames resolve to
+    unique matches.
     """
     jobs_dir = repo_path / "jobs"
     scripts_dir = repo_path / "scripts"
     if not jobs_dir.is_dir() or not scripts_dir.is_dir():
         return []
 
-    # Collect all ex-scripts in scripts/ (recursive).
-    existing_scripts = {
-        f.name for f in scripts_dir.rglob("*")
-        if f.is_file() and f.name.startswith("ex")
-    }
+    existing = _collect_scripts(scripts_dir, prefix="ex")
 
     results: list[LintResult] = []
     for jf in sorted(jobs_dir.iterdir()):
@@ -106,13 +157,13 @@ def check_jjob_exscript_exists(
             encoding="utf-8", errors="replace"
         )
         called = set(_EXSCRIPT_CALL.findall(content))
-        for script_name in sorted(called):
-            if script_name in existing_scripts:
+        for script_path in sorted(called):
+            if _resolve_call(script_path, existing) is not None:
                 results.append(LintResult(
                     status=Status.PASS,
                     rule_id="R2OXRF002",
                     message=(
-                        f"{jf.name} calls '{script_name}'"
+                        f"{jf.name} calls '{script_path}'"
                         " — found in scripts/."
                         " [NCO v11.0 IV.C]"
                     ),
@@ -123,13 +174,13 @@ def check_jjob_exscript_exists(
                     status=Status.FAIL,
                     rule_id="R2OXRF002",
                     message=(
-                        f"{jf.name} calls '{script_name}'"
+                        f"{jf.name} calls '{script_path}'"
                         " — not found in scripts/."
                         " [NCO v11.0 IV.C]"
                     ),
                     path=jf,
                     fix_hint=(
-                        f"Add '{script_name}' to scripts/."
+                        f"Add '{script_path}' to scripts/."
                     ),
                 ))
     return results
@@ -195,12 +246,6 @@ def check_ecf_references_jjob(
     return results
 
 
-# Pattern: $USHmodel/script.sh or ${USHmodel}/script.sh
-_USH_CALL = re.compile(
-    r"\$\{?\w+\}?/((?!ex)[a-z][a-z0-9_]*\.(?:sh|pl|py))"
-)
-
-
 @register_rule(applies_to=MODEL_REPO_TYPES)
 def check_exscript_ush_exists(
     repo_path: Path, config: Config
@@ -208,17 +253,15 @@ def check_exscript_ush_exists(
     """R2OXRF004 — Check ush scripts called from ex-scripts exist.
 
     Parse ex-scripts for ush script calls and verify the
-    referenced scripts exist in ush/.
+    referenced scripts exist in ush/. Calls carrying a
+    subdirectory must match by relative path.
     """
     scripts_dir = repo_path / "scripts"
     ush_dir = repo_path / "ush"
     if not scripts_dir.is_dir() or not ush_dir.is_dir():
         return []
 
-    existing_ush = {
-        f.name for f in ush_dir.rglob("*")
-        if f.is_file() and not f.name.startswith(".")
-    }
+    existing_ush = _collect_scripts(ush_dir)
 
     results: list[LintResult] = []
     for sf in sorted(scripts_dir.rglob("ex*")):
@@ -228,13 +271,13 @@ def check_exscript_ush_exists(
             encoding="utf-8", errors="replace"
         )
         called = set(_USH_CALL.findall(content))
-        for script_name in sorted(called):
-            if script_name in existing_ush:
+        for script_path in sorted(called):
+            if _resolve_call(script_path, existing_ush) is not None:
                 results.append(LintResult(
                     status=Status.PASS,
                     rule_id="R2OXRF004",
                     message=(
-                        f"{sf.name} calls '{script_name}'"
+                        f"{sf.name} calls '{script_path}'"
                         " — found in ush/."
                         " [NCO v11.0 IV.C]"
                     ),
@@ -245,16 +288,50 @@ def check_exscript_ush_exists(
                     status=Status.WARN,
                     rule_id="R2OXRF004",
                     message=(
-                        f"{sf.name} calls '{script_name}'"
+                        f"{sf.name} calls '{script_path}'"
                         " — not found in ush/."
                         " [NCO v11.0 IV.C]"
                     ),
                     path=sf,
                     fix_hint=(
-                        f"Add '{script_name}' to ush/."
+                        f"Add '{script_path}' to ush/."
                     ),
                 ))
     return results
+
+
+def _called_ex_set(text: str) -> set[str]:
+    return set(_EXSCRIPT_CALL.findall(text))
+
+
+def _called_ush_set(text: str) -> set[str]:
+    return set(_USH_CALL.findall(text))
+
+
+def _resolve_calls(
+    called_paths: set[str], scripts: dict[str, Path]
+) -> set[str]:
+    """Map each call to the specific script it references.
+
+    Returns a set of repo-relative paths actually referenced.
+    Qualified calls (``sub/foo.sh``) only hit an exact match.
+    Bare basename calls prefer a top-level match; otherwise
+    they resolve only when a single candidate exists.
+    """
+    resolved: set[str] = set()
+    for call in called_paths:
+        if call in scripts:
+            resolved.add(call)
+            continue
+        if "/" in call:
+            continue
+        matches = [
+            rel for rel in scripts
+            if Path(rel).name == call
+        ]
+        if len(matches) == 1:
+            resolved.add(matches[0])
+    return resolved
 
 
 @register_rule(applies_to=MODEL_REPO_TYPES)
@@ -265,8 +342,10 @@ def check_orphan_scripts(
 
     Find ex-scripts in scripts/ that are not referenced by
     any J-job, and ush scripts not referenced by any
-    ex-script. WARN severity — orphans may indicate dead
-    code or missing wiring.
+    ex-script. Identity uses the captured call path (or
+    basename if the call omits a subdirectory) rather than a
+    raw substring search, so two scripts with the same name
+    at different paths are disambiguated.
     """
     jobs_dir = repo_path / "jobs"
     scripts_dir = repo_path / "scripts"
@@ -291,17 +370,21 @@ def check_orphan_scripts(
                     encoding="utf-8", errors="replace"
                 )
 
+    jjob_ex_calls = _called_ex_set(jjob_text)
+    exscript_ush_calls = _called_ush_set(exscript_text)
+    jjob_ush_calls = _called_ush_set(jjob_text)
+
     # Check ex-scripts: are they called from any J-job?
     if scripts_dir.is_dir() and jobs_dir.is_dir():
-        for sf in sorted(scripts_dir.rglob("ex*")):
-            if not sf.is_file():
-                continue
-            if sf.name in jjob_text:
+        ex_scripts = _collect_scripts(scripts_dir, prefix="ex")
+        referenced_ex = _resolve_calls(jjob_ex_calls, ex_scripts)
+        for rel, sf in sorted(ex_scripts.items()):
+            if rel in referenced_ex:
                 results.append(LintResult(
                     status=Status.PASS,
                     rule_id="R2OXRF005",
                     message=(
-                        f"Ex-script '{sf.name}' is"
+                        f"Ex-script '{rel}' is"
                         " referenced by a J-job."
                     ),
                     path=sf,
@@ -311,7 +394,7 @@ def check_orphan_scripts(
                     status=Status.WARN,
                     rule_id="R2OXRF005",
                     message=(
-                        f"Ex-script '{sf.name}' is not"
+                        f"Ex-script '{rel}' is not"
                         " referenced by any J-job"
                         " (possible orphan)."
                     ),
@@ -324,15 +407,18 @@ def check_orphan_scripts(
 
     # Check ush scripts: are they called from any ex-script?
     if ush_dir.is_dir() and scripts_dir.is_dir():
-        for uf in sorted(ush_dir.rglob("*")):
-            if not uf.is_file() or uf.name.startswith("."):
-                continue
-            if uf.name in exscript_text or uf.name in jjob_text:
+        ush_scripts = _collect_scripts(ush_dir)
+        referenced_ush = (
+            _resolve_calls(exscript_ush_calls, ush_scripts)
+            | _resolve_calls(jjob_ush_calls, ush_scripts)
+        )
+        for rel, uf in sorted(ush_scripts.items()):
+            if rel in referenced_ush:
                 results.append(LintResult(
                     status=Status.PASS,
                     rule_id="R2OXRF005",
                     message=(
-                        f"Ush script '{uf.name}' is"
+                        f"Ush script '{rel}' is"
                         " referenced."
                     ),
                     path=uf,
@@ -342,7 +428,7 @@ def check_orphan_scripts(
                     status=Status.WARN,
                     rule_id="R2OXRF005",
                     message=(
-                        f"Ush script '{uf.name}' is not"
+                        f"Ush script '{rel}' is not"
                         " referenced by any script"
                         " (possible orphan)."
                     ),
