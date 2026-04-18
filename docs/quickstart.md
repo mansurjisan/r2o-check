@@ -88,6 +88,57 @@ r2o-check fix /path/to/repo --apply
 Auto-fix creates missing required directories and stubs version files.
 It does NOT auto-fix naming, environment, build, or ecFlow rules.
 
+## Incremental Adoption (Baselines)
+
+If the repo has many pre-existing findings, fix-everything-first is
+rarely feasible. r2o-check supports baselines so CI only fails on
+*new* violations:
+
+```bash
+# 1. Capture the current FAIL/WARN set.
+r2o-check baseline /path/to/repo
+#   → writes .r2o-check-baseline.json (commit it).
+
+# 2. Lint against the baseline in CI.
+r2o-check lint /path/to/repo --baseline .r2o-check-baseline.json
+
+# 3. When findings get fixed, refresh the baseline.
+r2o-check baseline /path/to/repo --update
+#   → drops resolved entries, adds any new ones.
+```
+
+Baselines are keyed on `(rule_id, relative_path, line_number)`. Each
+lint run warns on stderr if the baseline contains *stale* entries
+(findings that were once baselined but are no longer present) so the
+baseline cannot silently mask regressions after a fix lands.
+
+`PASS` and `ERROR` results pass through unchanged — a rule crash
+is always visible.
+
+## Running a Subset of Rules
+
+Useful when iterating on a single rule or investigating noise:
+
+```bash
+r2o-check lint . --only R2OXRF002,R2OECF005
+r2o-check lint . --fail-on warn        # strict CI gate: WARN → non-zero exit
+```
+
+## Optional: Deep ecFlow Validation
+
+Text-based ecFlow rules (R2OECF001–006) work offline and cover the
+common cases. For structural validation of `.def` files, install the
+ecFlow Python bindings (not on PyPI — use your system package
+manager) and r2o-check will enable the `R2OECF007` rule:
+
+```bash
+# e.g. Ubuntu:
+sudo apt install python3-ecflow
+```
+
+Without the library, R2OECF007 is inert — missing `ecflow` is not
+itself a compliance failure.
+
 ## GitHub Actions Integration
 
 Add to your workflow:

@@ -536,14 +536,112 @@ These rules validate ecFlow `.ecf` script files using text parsing only
 
 | Field | Value |
 |---|---|
-| **Severity** | WARN |
+| **Severity** | WARN (one per offending line) |
 | **NCO Section** | IV.A.vii, IV.B.4 |
 | **Rationale** | No hard-coded paths (`/lfs/`, `/work/`, `/scratch/`, `/gpfs/`, etc.) outside of variable assignments. Use environment variables. |
 
+Assignment lines — including `export VAR=/lfs/…`, `readonly`,
+`declare`, `local`, and `typeset` — are exempt. Each offending
+line produces its own WARN with a `line` field set, so SARIF and
+HTML output point directly at the problem line.
+
 **Example warning:**
 ```
-⚠ WARN  R2OECF005  jmodel.ecf: hard-coded paths at jmodel.ecf:8
+⚠ WARN  R2OECF005  jmodel.ecf:8: hard-coded path prefix '/lfs/'.
 ```
 
 **Fix:** Replace hard-coded paths with environment variables
 (e.g., `$COMROOT` instead of `/lfs/h1/ops/prod/com`).
+
+---
+
+### R2OECF007 — ecFlow .def file parses (optional)
+
+| Field | Value |
+|---|---|
+| **Severity** | FAIL on parse error, PASS on clean parse |
+| **NCO Section** | II |
+| **Rationale** | Verify `.def` files are structurally valid ecFlow by loading them with the `ecflow.Defs` parser. |
+
+Requires the optional `ecflow` Python binding, which is not
+published on PyPI — install via the system package manager
+(e.g. `apt install python3-ecflow`). When the binding is not
+importable the rule is inert and emits no results; a missing
+library is not itself a compliance failure.
+
+**Fix:** Run `ecflow_client --load=<file>` locally to see the
+parser error in context.
+
+---
+
+## Cross-Reference Rules (R2OXRF)
+
+These rules verify consistency between `jobs/`, `ecf/`,
+`scripts/`, and `ush/`. All R2OXRF rules record the line of the
+offending call site, so SARIF output points directly at the
+reference and CLI messages embed `file:line`.
+
+Call paths may include subdirectories (e.g.
+`${SCRIPTSmodel}/forecast/exmodel.sh`). When a call carries a
+subdirectory, it must resolve to the exact relative path under
+`scripts/` (or `ush/`) — bare basename matching is only used when
+the call omits a directory.
+
+**Applies to:** `operational_model`, `workflow`
+
+### R2OXRF001 — J-job has matching ecf file (WARN)
+### R2OXRF002 — Ex-scripts called from J-jobs exist (FAIL)
+### R2OXRF003 — ecf files reference real J-jobs (WARN)
+### R2OXRF004 — ush scripts called from ex-scripts exist (WARN)
+### R2OXRF005 — Orphan scripts (WARN)
+
+Orphan detection resolves each J-job call to a single specific
+script (preferring a top-level match when the call is a bare
+basename). Scripts at different paths with the same basename are
+disambiguated — a script can no longer be marked referenced just
+because its name appears somewhere in J-job text.
+
+---
+
+## Content Rules (R2OCNT)
+
+**Applies to:** `operational_model`, `workflow`
+
+### R2OCNT001 — J-job debug logging
+### R2OCNT002 — err_chk around executable calls
+### R2OCNT003 — Shebang present
+### R2OCNT004 — No background processes
+### R2OCNT005 — No absolute symlinks
+### R2OCNT006 — Production utilities
+
+R2OCNT006 bundles three checks drawn from NCO v11.0 III.C:
+
+1. `dbn_alert` calls must be guarded by `$SENDDBN` (WARN if not).
+2. Executables in ex-scripts should be preceded by `prep_step`
+   (WARN if missing).
+3. Bare `cp ` (without flags) in ex-scripts should be `cpreq` so
+   failures abort the job (WARN per offending line).
+
+### R2OCNT007 — Working directory hygiene
+
+All content rules strip shell comments before pattern matching,
+so commented-out assignments (`# export NET=...`,
+`# set -x`, `# KEEPDATA=...`) no longer satisfy the check.
+
+---
+
+## Baselines and Line Numbers
+
+Findings carry an optional `line` field populated by rules that
+can locate a violation to a specific line (R2OXRF002/003/004,
+R2OECF004/005, R2OCNT004, the `cp`-branch of R2OCNT006). The
+field surfaces in:
+
+- **SARIF** `physicalLocation.region.startLine`
+- **JSON** `results[].line`
+- **HTML** the Location column
+- **CLI / Markdown** embedded in the message as `file:line`
+
+Baselines fingerprint findings as `(rule_id, relpath, line)` so
+a regression on a *different* line produces a new finding even if
+the baseline already hides the same rule firing on line N.

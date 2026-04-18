@@ -394,6 +394,28 @@ def check_production_utilities(
                     ),
                 ))
 
+        # Check bare `cp` usage: NCO v11.0 III.C requires cpreq
+        # for essential file copies inside ex-scripts. Report
+        # one WARN per offending line so authors can locate it.
+        for m in _CP_CALL.finditer(content):
+            line = content.count("\n", 0, m.start()) + 1
+            results.append(LintResult(
+                status=Status.WARN,
+                rule_id="R2OCNT006",
+                message=(
+                    f"{name}:{line}: uses 'cp' — prefer"
+                    " 'cpreq' for essential file copies."
+                    " [NCO v11.0 III.C]"
+                ),
+                path=sf,
+                line=line,
+                fix_hint=(
+                    "Replace 'cp' with 'cpreq' for copies"
+                    " of essential files, so failures abort"
+                    " the job."
+                ),
+            ))
+
     return results
 
 

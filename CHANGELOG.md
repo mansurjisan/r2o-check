@@ -4,6 +4,38 @@
 
 ### Added
 
+- **Baseline hygiene**:
+  - `Baseline.find_stale()` returns fingerprints present in the
+    baseline but absent from the current run (findings that were
+    fixed upstream). `lint --baseline` now prints a stderr warning
+    when stale entries are detected, so a latent regression on a
+    different line cannot be silently masked.
+  - `r2o-check baseline --update` refreshes an existing baseline,
+    dropping stale entries and adding new ones with a
+    `+N new, -M resolved` summary.
+- **CLI ergonomics on `lint`**:
+  - `--fail-on {fail,warn}` — default `fail`; `warn` treats WARN
+    results as failures for exit code, for strict CI gates.
+  - `--only RULE[,RULE…]` — restrict a run to specific rule IDs,
+    useful for rule authors iterating on one rule.
+- **R2OCNT006 cp-vs-cpreq check**: bare `cp ` usage inside
+  ex-scripts now produces a WARN per offending line, matching the
+  rule's documented scope from NCO v11.0 §III.C. Flagged `cp` calls
+  are distinct from `cp -<flag>` (which is not emitted).
+- **Optional deep ecFlow mode**: new `R2OECF007` rule parses `.def`
+  files via the `ecflow` Python binding when available. Surfaced
+  through the `r2o-check[ecflow]` extra — the binding is not on PyPI
+  and is expected to come from a system package. Missing binding is
+  inert, not a compliance failure.
+
+### Changed
+
+- **`LintRunner.run_rules()` pipeline parity**: `run_rules` now
+  applies the same post-processing as `run` — disabled rules are
+  dropped, inline `r2o-check:disable` suppression is honored, and
+  `severity_overrides` rewrites statuses. `applies_to` is also
+  respected, so asking for a rule that doesn't apply to the current
+  `repo_type` returns no results.
 - **Line-numbered findings**: `LintResult` now carries an optional
   `line` field. Rules that scan content line-by-line (`R2OCNT004`,
   `R2OECF004`, `R2OECF005`) emit one result per offending line with

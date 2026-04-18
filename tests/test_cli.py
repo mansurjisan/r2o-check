@@ -225,3 +225,113 @@ def test_lint_baseline_missing_file_errors(
     )
     assert result.exit_code != 0
     assert "not found" in result.output
+
+
+def test_lint_baseline_warns_about_stale_entries(
+    tmp_path: Path,
+) -> None:
+    import json
+    import shutil
+    repo = tmp_path / "repo"
+    shutil.copytree(NONCOMPLIANT, repo)
+
+    runner = CliRunner(mix_stderr=False) if (
+        "mix_stderr"
+        in CliRunner.__init__.__code__.co_varnames
+    ) else CliRunner()
+    runner.invoke(main, ["baseline", str(repo)])
+    bl_file = repo / ".r2o-check-baseline.json"
+
+    # Inject a fake finding into the baseline that can't
+    # possibly match a real rule output.
+    data = json.loads(bl_file.read_text())
+    data["findings"].append("R2OSTR999|doesnotexist|42")
+    bl_file.write_text(json.dumps(data), encoding="utf-8")
+
+    result = runner.invoke(
+        main,
+        ["lint", str(repo), "--baseline", str(bl_file)],
+    )
+    # Depending on Click version stderr may be merged into
+    # output or available separately. Both are acceptable.
+    combined = result.output
+    if getattr(result, "stderr_bytes", None):
+        combined += result.stderr
+    assert "stale" in combined
+    assert "baseline --update" in combined
+
+
+def test_baseline_update_refreshes_existing(
+    tmp_path: Path,
+) -> None:
+    import json
+    import shutil
+    repo = tmp_path / "repo"
+    shutil.copytree(NONCOMPLIANT, repo)
+
+    runner = CliRunner()
+    runner.invoke(main, ["baseline", str(repo)])
+    bl_file = repo / ".r2o-check-baseline.json"
+
+    # Add a stale entry that update should drop.
+    data = json.loads(bl_file.read_text())
+    original_count = len(data["findings"])
+    data["findings"].append("R2OSTR999|fictional|1")
+    bl_file.write_text(json.dumps(data), encoding="utf-8")
+
+    result = runner.invoke(
+        main, ["baseline", str(repo), "--update"]
+    )
+    assert result.exit_code == 0
+    assert "resolved" in result.output
+
+    refreshed = json.loads(bl_file.read_text())
+    assert len(refreshed["findings"]) == original_count
+
+
+def test_baseline_update_requires_existing_file(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".r2o-check.yml").write_text(
+        "repo_type: tool\n", encoding="utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["baseline", str(repo), "--update"]
+    )
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+def test_fail_on_warn_escalates_exit_code() -> None:
+    runner = CliRunner()
+    # COMPLIANT fixture has warns but no fails — default exit 0.
+    default_result = runner.invoke(
+        main, ["lint", str(COMPLIANT)]
+    )
+    strict_result = runner.invoke(
+        main, ["lint", str(COMPLIANT), "--fail-on", "warn"]
+    )
+    # At least one of them must differ; if COMPLIANT truly
+    # has warnings, strict mode should exit 1.
+    has_warnings = "WARN" in default_result.output
+    if has_warnings:
+        assert strict_result.exit_code == 1
+    else:
+        assert strict_result.exit_code == default_result.exit_code
+
+
+def test_only_filter_runs_subset() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["lint", str(COMPLIANT), "--only", "R2OSTR001",
+         "--format", "json"],
+    )
+    assert result.exit_code == 0
+    import json
+    data = json.loads(result.output)
+    rule_ids = {r["rule_id"] for r in data["results"]}
+    assert rule_ids == {"R2OSTR001"}

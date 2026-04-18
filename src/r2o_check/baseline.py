@@ -117,3 +117,22 @@ class Baseline:
                     continue
             kept.append(r)
         return kept
+
+    def find_stale(
+        self,
+        results: Iterable[LintResult],
+        repo_path: Path,
+    ) -> set[str]:
+        """Return baseline entries no longer matching any finding.
+
+        A "stale" entry is one whose fingerprint does not appear in
+        the current FAIL/WARN results — typically because the
+        underlying violation was fixed. Stale entries silently mask
+        regressions if left in the baseline.
+        """
+        current = {
+            fingerprint(r, repo_path)
+            for r in results
+            if r.status in (Status.FAIL, Status.WARN)
+        }
+        return self.fingerprints - current

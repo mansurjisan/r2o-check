@@ -65,18 +65,48 @@ def main() -> None:
         " baseline' to generate one."
     ),
 )
+@click.option(
+    "--fail-on",
+    "fail_on",
+    type=click.Choice(["fail", "warn"]),
+    default="fail",
+    help=(
+        "Exit non-zero on FAIL only (default) or on FAIL"
+        " and WARN ('warn' for strict CI gates)."
+    ),
+)
+@click.option(
+    "--only",
+    "only_rules",
+    type=str,
+    default=None,
+    help=(
+        "Comma-separated rule IDs to run exclusively"
+        " (e.g. 'R2OXRF002,R2OECF005'). Other rules are"
+        " skipped."
+    ),
+)
 def lint(
     path: str,
     fmt: str,
     output_file: str | None,
     markdown_include_passes: bool,
     baseline_file: str | None,
+    fail_on: str,
+    only_rules: str | None,
 ) -> None:
     """Lint a repo for NCO Implementation Standards compliance."""
     repo_path = Path(path)
     config = load_config(repo_path)
     runner = LintRunner(repo_path, config)
-    results = runner.run()
+    if only_rules:
+        ids = [
+            rid.strip() for rid in only_rules.split(",")
+            if rid.strip()
+        ]
+        results = runner.run_rules(ids)
+    else:
+        results = runner.run()
 
     if baseline_file:
         bl_path = Path(baseline_file)
@@ -85,11 +115,23 @@ def lint(
                 f"Baseline file not found: {bl_path}"
             )
         baseline = Baseline.load(bl_path)
+        stale = baseline.find_stale(results, repo_path)
+        if stale:
+            click.echo(
+                f"Warning: baseline has {len(stale)} stale"
+                " entr" + ("ies" if len(stale) > 1 else "y")
+                + " (finding no longer present)."
+                " Run 'r2o-check baseline --update"
+                f" {bl_path}' to refresh.",
+                err=True,
+            )
         results = baseline.filter(results, repo_path)
 
+    failing_statuses = {Status.FAIL, Status.ERROR}
+    if fail_on == "warn":
+        failing_statuses.add(Status.WARN)
     has_failures = any(
-        r.status in (Status.FAIL, Status.ERROR)
-        for r in results
+        r.status in failing_statuses for r in results
     )
 
     if fmt == "json":
@@ -154,13 +196,27 @@ def lint(
     default=False,
     help="Overwrite an existing baseline file.",
 )
+@click.option(
+    "--update",
+    "update_existing",
+    is_flag=True,
+    default=False,
+    help=(
+        "Refresh an existing baseline against current"
+        " findings (drops stale entries, adds new ones)."
+    ),
+)
 def baseline(
-    path: str, output_file: str | None, force: bool
+    path: str,
+    output_file: str | None,
+    force: bool,
+    update_existing: bool,
 ) -> None:
     """Record current FAIL/WARN findings as a baseline.
 
     Future ``lint --baseline <file>`` runs will suppress the
     findings captured here so only *new* violations surface.
+    Pass ``--update`` to refresh an existing baseline.
     """
     repo_path = Path(path)
     config = load_config(repo_path)
@@ -171,18 +227,37 @@ def baseline(
         Path(output_file) if output_file
         else repo_path / DEFAULT_BASELINE_NAME
     )
+
+    console = Console()
+    new_bl = Baseline.from_results(results, repo_path)
+
+    if update_existing:
+        if not out_path.exists():
+            raise click.ClickException(
+                f"{out_path} does not exist — use"
+                " 'r2o-check baseline' without --update"
+                " to create a new one."
+            )
+        existing = Baseline.load(out_path)
+        added = new_bl.fingerprints - existing.fingerprints
+        dropped = existing.fingerprints - new_bl.fingerprints
+        new_bl.save(out_path)
+        console.print(
+            f"[green]Updated[/green] {out_path}:"
+            f" +{len(added)} new, -{len(dropped)} resolved"
+            f" (total {len(new_bl.fingerprints)})."
+        )
+        return
+
     if out_path.exists() and not force:
         raise click.ClickException(
             f"{out_path} already exists; pass --force to"
-            " overwrite."
+            " overwrite or --update to refresh."
         )
 
-    bl = Baseline.from_results(results, repo_path)
-    bl.save(out_path)
-
-    console = Console()
+    new_bl.save(out_path)
     console.print(
-        f"[green]Baselined {len(bl.fingerprints)}"
+        f"[green]Baselined {len(new_bl.fingerprints)}"
         f" findings[/green] to {out_path}"
     )
 

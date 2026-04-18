@@ -132,6 +132,7 @@ RULE_MODULES: list[str] = [
     "r2o_check.rules.modules",
     "r2o_check.rules.versions",
     "r2o_check.rules.ecflow",
+    "r2o_check.rules.ecflow_def",
     "r2o_check.rules.crossref",
     "r2o_check.rules.content",
 ]
@@ -187,6 +188,45 @@ class LintRunner:
                 )
         return result
 
+    def _execute_rule(
+        self, name: str, entry: RuleEntry
+    ) -> list[LintResult]:
+        """Run a rule function and catch exceptions as ERROR."""
+        try:
+            return entry.func(self.repo_path, self.config)
+        except Exception:
+            return [
+                LintResult(
+                    status=Status.ERROR,
+                    rule_id=_infer_rule_id(entry.func),
+                    message=(
+                        f"Rule {name!r} raised an"
+                        f" exception:"
+                        f" {traceback.format_exc()}"
+                    ),
+                )
+            ]
+
+    def _post_process(
+        self, rule_results: list[LintResult]
+    ) -> tuple[list[LintResult], bool]:
+        """Apply disabled/suppression/override to raw results.
+
+        Returns (kept_results, has_pass).
+        """
+        kept: list[LintResult] = []
+        has_pass = False
+        for result in rule_results:
+            if result.rule_id in self.config.disabled_rules:
+                continue
+            if self._is_suppressed(result):
+                continue
+            result = self._apply_override(result)
+            kept.append(result)
+            if result.status == Status.PASS:
+                has_pass = True
+        return kept, has_pass
+
     def run(self) -> list[LintResult]:
         """Run all applicable, non-disabled rules."""
         if not self._rules:
@@ -207,65 +247,36 @@ class LintRunner:
                     entry.mutually_exclusive_with
                 ):
                     continue
-            try:
-                rule_results = entry.func(
-                    self.repo_path, self.config
-                )
-            except Exception:
-                rule_results = [
-                    LintResult(
-                        status=Status.ERROR,
-                        rule_id=_infer_rule_id(entry.func),
-                        message=(
-                            f"Rule {name!r} raised an"
-                            f" exception:"
-                            f" {traceback.format_exc()}"
-                        ),
-                    )
-                ]
-            has_pass = False
-            for result in rule_results:
-                if result.rule_id in self.config.disabled_rules:
-                    continue
-                if self._is_suppressed(result):
-                    continue
-                result = self._apply_override(result)
-                results.append(result)
-                if result.status == Status.PASS:
-                    has_pass = True
-            # Only mark as "ran" if it produced PASS results
-            # (not just warnings about missing files).
+            rule_results = self._execute_rule(name, entry)
+            kept, has_pass = self._post_process(rule_results)
+            results.extend(kept)
             if has_pass:
-                rid = _infer_rule_id(entry.func)
-                ran_rule_ids.add(rid)
+                ran_rule_ids.add(_infer_rule_id(entry.func))
         return results
 
     def run_rules(self, rule_ids: Sequence[str]) -> list[LintResult]:
-        """Run only the specified rule IDs."""
+        """Run only the specified rule IDs.
+
+        Shares the post-processing pipeline with ``run`` so
+        disabled rules, severity overrides, and inline
+        suppression behave identically. ``applies_to`` is still
+        honored — requesting a rule outside the repo_type
+        matrix yields no results.
+        """
         if not self._rules:
             self.discover_rules()
 
+        wanted = set(rule_ids)
         results: list[LintResult] = []
         for name, entry in sorted(self._rules.items()):
             rid = _infer_rule_id(entry.func)
-            if rid not in rule_ids:
+            if rid not in wanted:
                 continue
-            try:
-                rule_results = entry.func(
-                    self.repo_path, self.config
-                )
-            except Exception:
-                rule_results = [
-                    LintResult(
-                        status=Status.ERROR,
-                        rule_id=rid,
-                        message=(
-                            f"Rule {name!r} raised an exception:"
-                            f" {traceback.format_exc()}"
-                        ),
-                    )
-                ]
-            results.extend(rule_results)
+            if not self._applies(entry):
+                continue
+            rule_results = self._execute_rule(name, entry)
+            kept, _ = self._post_process(rule_results)
+            results.extend(kept)
         return results
 
 

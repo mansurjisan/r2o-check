@@ -50,6 +50,15 @@ dev = [
     "mypy>=1.0",
     "types-PyYAML",
 ]
+# Deep ecFlow .def validation. The 'ecflow' Python module is
+# not published on PyPI; install it via the system package
+# manager (e.g. 'apt install python3-ecflow') or build from
+# the ECMWF ecFlow distribution. Listed here for
+# documentation — pip install r2o-check[ecflow] will fail
+# unless ecflow is already importable.
+ecflow = [
+    "ecflow",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/r2o_check"]

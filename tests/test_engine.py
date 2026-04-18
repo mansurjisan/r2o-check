@@ -128,3 +128,41 @@ def test_register_rule_bare_decorator() -> None:
     assert entry.applies_to == ALL_REPO_TYPES
 
     del _RULE_REGISTRY["_test_rule_bare"]
+
+
+def test_run_rules_applies_disabled_and_suppression(
+    tmp_path: Path,
+) -> None:
+    """run_rules shares post-processing with run."""
+    from r2o_check.engine import _RULE_REGISTRY
+
+    @register_rule(applies_to=ALL_REPO_TYPES)
+    def _test_rule_parity(
+        repo_path: Path, config: Config
+    ) -> list[LintResult]:
+        """R2OTEST900 — parity."""
+        return [
+            LintResult(
+                status=Status.FAIL,
+                rule_id="R2OTEST900",
+                message="should be filtered",
+            ),
+        ]
+
+    try:
+        # Disabled via config should drop the result.
+        config = Config(disabled_rules=["R2OTEST900"])
+        runner = LintRunner(tmp_path, config)
+        out = runner.run_rules(["R2OTEST900"])
+        assert out == []
+
+        # Severity override should flip the status.
+        config = Config(
+            severity_overrides={"R2OTEST900": "warn"},
+        )
+        runner = LintRunner(tmp_path, config)
+        out = runner.run_rules(["R2OTEST900"])
+        assert len(out) == 1
+        assert out[0].status == Status.WARN
+    finally:
+        del _RULE_REGISTRY["_test_rule_parity"]

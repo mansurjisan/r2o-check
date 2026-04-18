@@ -76,6 +76,26 @@ r2o-check fix /path/to/repo --apply     # Apply safe fixes
 
 Creates missing required directories and stubs version files. Does not auto-fix naming, environment, or ecFlow rules.
 
+## Incremental Adoption (Baselines)
+
+Existing repos with many pre-existing findings can adopt r2o-check without having to fix everything first. Capture a baseline of current violations and then only new violations will fail CI:
+
+```bash
+r2o-check baseline /path/to/repo                       # writes .r2o-check-baseline.json
+r2o-check lint /path/to/repo --baseline .r2o-check-baseline.json
+r2o-check baseline /path/to/repo --update              # drop resolved, add new
+```
+
+The baseline is keyed on `(rule_id, relative_path, line_number)`. Each lint run warns on stderr when the baseline contains stale entries — findings that were once baselined but are no longer present — so regressions cannot be silently masked.
+
+## CI Ergonomics
+
+```bash
+r2o-check lint . --fail-on warn            # treat WARN as failure for exit code
+r2o-check lint . --only R2OXRF002,R2OECF005 # restrict to specific rules
+r2o-check lint . --format sarif -o r2o.sarif # upload to GitHub Code Scanning
+```
+
 ## Repo Types
 
 Configure in `.r2o-check.yml` — rules auto-filter based on your repo type:

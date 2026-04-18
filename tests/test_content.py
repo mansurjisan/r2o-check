@@ -12,6 +12,7 @@ from r2o_check.rules.content import (
     check_err_chk_usage,
     check_jjob_debug_settings,
     check_no_background_procs,
+    check_production_utilities,
     check_shebang,
     check_working_dir_hygiene,
 )
@@ -188,3 +189,43 @@ class TestNoBackground:
         results = check_no_background_procs(tmp_path, config)
         passes = [r for r in results if r.status == Status.PASS]
         assert len(passes) >= 1
+
+
+class TestProductionUtilities:
+    def test_bare_cp_warns_with_line(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "exmodel.sh").write_text(
+            "#!/bin/bash\n"
+            "cp input.dat $COMOUT/\n"
+            "cpreq other.dat $COMOUT/\n"
+            "cp again.dat $COMOUT/\n"
+        )
+        results = check_production_utilities(tmp_path, config)
+        cp_warns = [
+            r for r in results
+            if r.status == Status.WARN
+            and "'cp'" in r.message
+        ]
+        assert len(cp_warns) == 2
+        lines = sorted(w.line for w in cp_warns if w.line)
+        assert lines == [2, 4]
+
+    def test_cp_with_flags_not_flagged(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "exmodel.sh").write_text(
+            "#!/bin/bash\n"
+            "cp -p input.dat $COMOUT/\n"
+        )
+        results = check_production_utilities(tmp_path, config)
+        cp_warns = [
+            r for r in results
+            if r.status == Status.WARN
+            and "'cp'" in r.message
+        ]
+        assert cp_warns == []

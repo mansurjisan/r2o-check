@@ -89,6 +89,40 @@ def test_filter_drops_baselined_fail(tmp_path: Path) -> None:
     assert fails[0].line == 10
 
 
+def test_find_stale_returns_dropped_entries(
+    tmp_path: Path,
+) -> None:
+    jobs = tmp_path / "jobs"
+    jobs.mkdir()
+    jf = jobs / "JMODEL"
+    jf.touch()
+
+    # Baseline captures two findings.
+    baselined = [
+        _result(Status.FAIL, path=jf, line=3),
+        _result(Status.FAIL, path=jf, line=10),
+    ]
+    bl = Baseline.from_results(baselined, tmp_path)
+
+    # Current run only has one of them (the other was fixed).
+    current = [
+        _result(Status.FAIL, path=jf, line=3),
+    ]
+    stale = bl.find_stale(current, tmp_path)
+    assert len(stale) == 1
+    assert any("|10" in fp for fp in stale)
+
+
+def test_find_stale_empty_when_all_still_present(
+    tmp_path: Path,
+) -> None:
+    jf = tmp_path / "x"
+    jf.touch()
+    results = [_result(Status.WARN, path=jf, line=1)]
+    bl = Baseline.from_results(results, tmp_path)
+    assert bl.find_stale(results, tmp_path) == set()
+
+
 def test_rejects_unknown_version(tmp_path: Path) -> None:
     bl_file = tmp_path / "bl.json"
     bl_file.write_text(
