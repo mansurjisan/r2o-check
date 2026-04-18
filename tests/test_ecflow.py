@@ -144,6 +144,7 @@ class TestEcfDirectives:
         results = check_ecf_directives(tmp_path, config)
         assert len(results) == 1
         assert results[0].status == Status.WARN
+        assert results[0].line == 2
 
 
 # ── R2OECF005: hard-coded paths ──────────────────────────────
@@ -163,8 +164,12 @@ class TestEcfHardcodedPaths:
             HARDCODED, config
         )
         warns = [r for r in results if r.status == Status.WARN]
-        assert len(warns) == 1
-        assert "/lfs/" in warns[0].message or "hard-coded" in warns[0].message
+        assert len(warns) >= 1
+        assert all(w.line is not None for w in warns)
+        assert any(
+            "/lfs/" in w.message or "/gpfs/" in w.message
+            for w in warns
+        )
 
     def test_assignment_lines_excluded(
         self, tmp_path: Path, config: Config
@@ -179,6 +184,17 @@ class TestEcfHardcodedPaths:
         )
         results = check_ecf_hardcoded_paths(tmp_path, config)
         assert all(r.status == Status.PASS for r in results)
+
+    def test_hardcoded_paths_record_line_numbers(
+        self, config: Config
+    ) -> None:
+        results = check_ecf_hardcoded_paths(
+            HARDCODED, config
+        )
+        warns = [r for r in results if r.status == Status.WARN]
+        assert len(warns) == 2
+        lines = sorted(w.line for w in warns if w.line)
+        assert lines == [7, 8]
 
     def test_export_assignment_excluded(
         self, tmp_path: Path, config: Config

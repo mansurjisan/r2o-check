@@ -2,8 +2,37 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Line-numbered findings**: `LintResult` now carries an optional
+  `line` field. Rules that scan content line-by-line (`R2OCNT004`,
+  `R2OECF004`, `R2OECF005`) emit one result per offending line with
+  its line number. Cross-reference rules (`R2OXRF002/003/004`) record
+  the line of each call site.
+- **Line rendering in formatters**: SARIF `region.startLine` is now
+  populated (previously always 1), JSON results include a `line`
+  field, HTML reports show a `Location` column with `path:line`, and
+  rule messages embed `file:line` wherever the underlying rule knows
+  it. SARIF paths are also now relative to the linted repo, not
+  `Path.cwd()`.
+- **Baseline support** for incremental adoption:
+  - `r2o-check baseline <path>` records current `FAIL`/`WARN`
+    findings to `.r2o-check-baseline.json` (configurable with `-o`).
+    `--force` overwrites an existing baseline.
+  - `r2o-check lint --baseline <file>` suppresses any finding whose
+    fingerprint (rule_id + relpath + line) appears in the baseline,
+    so only *new* violations surface. `PASS` and `ERROR` results
+    always pass through.
+- **Markdown categories** for `R2OCNT` (Content) and `R2OXRF`
+  (Cross-reference) — they no longer fall into the generic "Other"
+  group in PR-comment output.
+
 ### Fixed
 
+- **R2OCNT004 regex swallowed multiple lines**: the character class
+  allowed newlines, so a file with several `cmd &` lines reported
+  only one match spanning the whole remainder. Now anchored to a
+  single line.
 - **Comment stripping in shell-text rules**: `R2OENV001`, `R2OENV002`,
   `R2OCNT001`, `R2OCNT002`, `R2OCNT004`, `R2OCNT006`, and `R2OCNT007` no
   longer treat commented-out lines as compliance signals. Introduced

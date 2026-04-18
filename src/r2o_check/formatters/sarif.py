@@ -21,8 +21,14 @@ _SARIF_LEVEL = {
 def format_results_sarif(
     results: list[LintResult],
     config: Config,
+    repo_path: Path | None = None,
 ) -> str:
-    """Format results as SARIF 2.1.0 for Code Scanning."""
+    """Format results as SARIF 2.1.0 for Code Scanning.
+
+    Paths are made relative to ``repo_path`` when provided,
+    falling back to the current working directory otherwise.
+    """
+    base = (repo_path or Path.cwd()).resolve()
     # Only include non-passing results in SARIF.
     findings = [
         r for r in results if r.status != Status.PASS
@@ -37,13 +43,15 @@ def format_results_sarif(
         }
         if r.path and r.path.is_file():
             try:
-                rel = str(r.path.relative_to(Path.cwd()))
+                rel = r.path.resolve().relative_to(base).as_posix()
             except ValueError:
                 rel = str(r.path)
             result["locations"] = [{
                 "physicalLocation": {
                     "artifactLocation": {"uri": rel},
-                    "region": {"startLine": 1},
+                    "region": {
+                        "startLine": r.line if r.line else 1,
+                    },
                 }
             }]
         if r.fix_hint:

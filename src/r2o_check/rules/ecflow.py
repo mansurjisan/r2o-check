@@ -247,38 +247,40 @@ def check_ecf_directives(
         name = ef.name
         has_pbs = False
         has_sbatch = False
-        bad_lines: list[str] = []
+        bad: list[tuple[int, str]] = []
 
         for i, line in enumerate(content.splitlines(), 1):
             stripped = line.strip()
             if stripped.startswith("#PBS"):
                 has_pbs = True
                 if not _PBS_DIRECTIVE.match(stripped):
-                    bad_lines.append(f"{name}:{i}")
+                    bad.append((i, "PBS"))
             elif stripped.startswith("#SBATCH"):
                 has_sbatch = True
                 if not _SBATCH_DIRECTIVE.match(stripped):
-                    bad_lines.append(f"{name}:{i}")
+                    bad.append((i, "SBATCH"))
 
         if not has_pbs and not has_sbatch:
             # No scheduler directives — may be in ecFlow vars.
             continue
 
-        if bad_lines:
-            results.append(LintResult(
-                status=Status.WARN,
-                rule_id="R2OECF004",
-                message=(
-                    f"{name}: malformed scheduler directives"
-                    f" at {', '.join(bad_lines[:3])}."
-                    " [NCO v11.0 II]"
-                ),
-                path=ef,
-                fix_hint=(
-                    "Use '#PBS -<flag> <value>' or"
-                    " '#SBATCH --<flag>=<value>' syntax."
-                ),
-            ))
+        if bad:
+            for line_no, kind in bad:
+                results.append(LintResult(
+                    status=Status.WARN,
+                    rule_id="R2OECF004",
+                    message=(
+                        f"{name}:{line_no}: malformed"
+                        f" {kind} directive."
+                        " [NCO v11.0 II]"
+                    ),
+                    path=ef,
+                    line=line_no,
+                    fix_hint=(
+                        "Use '#PBS -<flag> <value>' or"
+                        " '#SBATCH --<flag>=<value>' syntax."
+                    ),
+                ))
         else:
             scheduler = "PBS" if has_pbs else "SBATCH"
             results.append(LintResult(
@@ -313,7 +315,7 @@ def check_ecf_hardcoded_paths(
             encoding="utf-8", errors="replace"
         )
         name = ef.name
-        bad_lines: list[str] = []
+        hits: list[tuple[int, str]] = []
 
         for i, line in enumerate(content.splitlines(), 1):
             stripped = line.strip()
@@ -327,24 +329,26 @@ def check_ecf_hardcoded_paths(
             prefixes = config.ecflow.hardcoded_path_prefixes
             for prefix in prefixes:
                 if prefix in stripped:
-                    bad_lines.append(f"{name}:{i}")
+                    hits.append((i, prefix))
                     break
 
-        if bad_lines:
-            results.append(LintResult(
-                status=Status.WARN,
-                rule_id="R2OECF005",
-                message=(
-                    f"{name}: hard-coded paths at"
-                    f" {', '.join(bad_lines[:3])}."
-                    " [NCO v11.0 IV.A.vii]"
-                ),
-                path=ef,
-                fix_hint=(
-                    "Use environment variables instead of"
-                    " hard-coded absolute paths."
-                ),
-            ))
+        if hits:
+            for line_no, prefix in hits:
+                results.append(LintResult(
+                    status=Status.WARN,
+                    rule_id="R2OECF005",
+                    message=(
+                        f"{name}:{line_no}: hard-coded"
+                        f" path prefix '{prefix}'."
+                        " [NCO v11.0 IV.A.vii]"
+                    ),
+                    path=ef,
+                    line=line_no,
+                    fix_hint=(
+                        "Use environment variables instead of"
+                        " hard-coded absolute paths."
+                    ),
+                ))
         else:
             results.append(LintResult(
                 status=Status.PASS,

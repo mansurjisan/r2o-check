@@ -156,3 +156,72 @@ def test_fix_scaffolds_for_operational_model(
     assert result.exit_code == 0
     assert (repo / "ecf").is_dir()
     assert (repo / "jobs").is_dir()
+
+
+def test_baseline_creates_file_and_lint_filters(
+    tmp_path: Path,
+) -> None:
+    # Copy noncompliant fixture into tmp so we can write a
+    # baseline next to it.
+    import shutil
+    repo = tmp_path / "repo"
+    shutil.copytree(NONCOMPLIANT, repo)
+
+    runner = CliRunner()
+    # Generate baseline.
+    result = runner.invoke(
+        main, ["baseline", str(repo)]
+    )
+    assert result.exit_code == 0, result.output
+    bl_file = repo / ".r2o-check-baseline.json"
+    assert bl_file.exists()
+    assert "Baselined" in result.output
+
+    # Lint with baseline: all existing FAILs should be
+    # suppressed, so exit code is 0.
+    result = runner.invoke(
+        main,
+        ["lint", str(repo), "--baseline", str(bl_file)],
+    )
+    assert result.exit_code == 0
+    # Passes still surface.
+    assert "PASS" in result.output
+
+
+def test_baseline_refuses_overwrite_without_force(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".r2o-check.yml").write_text(
+        "repo_type: tool\n", encoding="utf-8"
+    )
+    existing = repo / ".r2o-check-baseline.json"
+    existing.write_text("{}", encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["baseline", str(repo)])
+    assert result.exit_code != 0
+    assert "--force" in result.output
+
+    result = runner.invoke(
+        main, ["baseline", str(repo), "--force"]
+    )
+    assert result.exit_code == 0
+
+
+def test_lint_baseline_missing_file_errors(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".r2o-check.yml").write_text(
+        "repo_type: tool\n", encoding="utf-8"
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["lint", str(repo), "--baseline", str(repo / "nope.json")],
+    )
+    assert result.exit_code != 0
+    assert "not found" in result.output

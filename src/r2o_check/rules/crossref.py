@@ -50,6 +50,11 @@ def _collect_scripts(
     return scripts
 
 
+def _line_of(content: str, offset: int) -> int:
+    """Return 1-based line number for a byte offset."""
+    return content.count("\n", 0, offset) + 1
+
+
 def _resolve_call(
     called: str, scripts: dict[str, Path]
 ) -> Path | None:
@@ -156,29 +161,37 @@ def check_jjob_exscript_exists(
         content = jf.read_text(
             encoding="utf-8", errors="replace"
         )
-        called = set(_EXSCRIPT_CALL.findall(content))
-        for script_path in sorted(called):
+        seen: dict[str, int] = {}
+        for m in _EXSCRIPT_CALL.finditer(content):
+            sp = m.group(1)
+            if sp not in seen:
+                seen[sp] = _line_of(content, m.start())
+        for script_path, line in sorted(seen.items()):
             if _resolve_call(script_path, existing) is not None:
                 results.append(LintResult(
                     status=Status.PASS,
                     rule_id="R2OXRF002",
                     message=(
-                        f"{jf.name} calls '{script_path}'"
+                        f"{jf.name}:{line} calls"
+                        f" '{script_path}'"
                         " — found in scripts/."
                         " [NCO v11.0 IV.C]"
                     ),
                     path=jf,
+                    line=line,
                 ))
             else:
                 results.append(LintResult(
                     status=Status.FAIL,
                     rule_id="R2OXRF002",
                     message=(
-                        f"{jf.name} calls '{script_path}'"
+                        f"{jf.name}:{line} calls"
+                        f" '{script_path}'"
                         " — not found in scripts/."
                         " [NCO v11.0 IV.C]"
                     ),
                     path=jf,
+                    line=line,
                     fix_hint=(
                         f"Add '{script_path}' to scripts/."
                     ),
@@ -216,29 +229,35 @@ def check_ecf_references_jjob(
         content = ef.read_text(
             encoding="utf-8", errors="replace"
         )
-        called = set(jjob_call.findall(content))
-        for jname in sorted(called):
+        seen: dict[str, int] = {}
+        for m in jjob_call.finditer(content):
+            jname = m.group(1)
+            if jname not in seen:
+                seen[jname] = _line_of(content, m.start())
+        for jname, line in sorted(seen.items()):
             if jname in jjobs:
                 results.append(LintResult(
                     status=Status.PASS,
                     rule_id="R2OXRF003",
                     message=(
-                        f"{ef.name} calls '{jname}'"
+                        f"{ef.name}:{line} calls '{jname}'"
                         " — found in jobs/."
                         " [NCO v11.0 II]"
                     ),
                     path=ef,
+                    line=line,
                 ))
             else:
                 results.append(LintResult(
                     status=Status.WARN,
                     rule_id="R2OXRF003",
                     message=(
-                        f"{ef.name} calls '{jname}'"
+                        f"{ef.name}:{line} calls '{jname}'"
                         " — not found in jobs/."
                         " [NCO v11.0 II]"
                     ),
                     path=ef,
+                    line=line,
                     fix_hint=(
                         f"Add '{jname}' to jobs/."
                     ),
@@ -270,29 +289,37 @@ def check_exscript_ush_exists(
         content = sf.read_text(
             encoding="utf-8", errors="replace"
         )
-        called = set(_USH_CALL.findall(content))
-        for script_path in sorted(called):
+        seen: dict[str, int] = {}
+        for m in _USH_CALL.finditer(content):
+            sp = m.group(1)
+            if sp not in seen:
+                seen[sp] = _line_of(content, m.start())
+        for script_path, line in sorted(seen.items()):
             if _resolve_call(script_path, existing_ush) is not None:
                 results.append(LintResult(
                     status=Status.PASS,
                     rule_id="R2OXRF004",
                     message=(
-                        f"{sf.name} calls '{script_path}'"
+                        f"{sf.name}:{line} calls"
+                        f" '{script_path}'"
                         " — found in ush/."
                         " [NCO v11.0 IV.C]"
                     ),
                     path=sf,
+                    line=line,
                 ))
             else:
                 results.append(LintResult(
                     status=Status.WARN,
                     rule_id="R2OXRF004",
                     message=(
-                        f"{sf.name} calls '{script_path}'"
+                        f"{sf.name}:{line} calls"
+                        f" '{script_path}'"
                         " — not found in ush/."
                         " [NCO v11.0 IV.C]"
                     ),
                     path=sf,
+                    line=line,
                     fix_hint=(
                         f"Add '{script_path}' to ush/."
                     ),

@@ -168,11 +168,13 @@ class TestNoBackground:
             "#!/bin/bash\n"
             "$EXECmodel/model.x &\n"
             "wait\n"
+            "$EXECmodel/post.x &\n"
         )
         results = check_no_background_procs(tmp_path, config)
         warns = [r for r in results if r.status == Status.WARN]
-        assert len(warns) >= 1
-        assert "background" in warns[0].message
+        assert len(warns) == 2
+        lines = sorted(w.line for w in warns if w.line)
+        assert lines == [2, 4]
 
     def test_ampersand_in_and_not_flagged(
         self, tmp_path: Path, config: Config

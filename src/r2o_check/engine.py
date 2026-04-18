@@ -32,6 +32,7 @@ class LintResult:
     message: str
     path: Path | None = None
     fix_hint: str | None = None
+    line: int | None = None
 
 
 # Type alias for a rule function.
@@ -182,6 +183,7 @@ class LintRunner:
                     message=result.message,
                     path=result.path,
                     fix_hint=result.fix_hint,
+                    line=result.line,
                 )
         return result
 

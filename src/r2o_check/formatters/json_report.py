@@ -39,6 +39,7 @@ def format_results_json(
                 "status": r.status.value,
                 "message": r.message,
                 "path": str(r.path) if r.path else None,
+                "line": r.line,
                 "fix_hint": r.fix_hint,
             }
             for r in results

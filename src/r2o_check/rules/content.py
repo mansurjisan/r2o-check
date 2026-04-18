@@ -204,8 +204,10 @@ def check_shebang(
 
 # Pattern: command with & at end (background process).
 # Excludes: comments, && chains, heredocs, variable assignments.
+# Anchored to a single line — character class excludes newline
+# so one line's match can't swallow subsequent lines.
 _BACKGROUND_PROC = re.compile(
-    r"^[^#]*[^&|]\s*&\s*$", re.MULTILINE
+    r"^[^#\n]*[^&|\n]\s*&\s*$", re.MULTILINE
 )
 
 
@@ -226,23 +228,25 @@ def check_no_background_procs(
             content = strip_shell_comments(sf.read_text(
                 encoding="utf-8", errors="replace"
             ))
-            matches = _BACKGROUND_PROC.findall(content)
+            matches = list(_BACKGROUND_PROC.finditer(content))
             if matches:
-                count = len(matches)
-                results.append(LintResult(
-                    status=Status.WARN,
-                    rule_id="R2OCNT004",
-                    message=(
-                        f"{dirname}/{sf.name}: {count}"
-                        " background process(es) detected."
-                        " [NCO v11.0 IV.A.vi]"
-                    ),
-                    path=sf,
-                    fix_hint=(
-                        "Remove '&' — PBS Pro loses control"
-                        " of background processes."
-                    ),
-                ))
+                for m in matches:
+                    line = content.count("\n", 0, m.start()) + 1
+                    results.append(LintResult(
+                        status=Status.WARN,
+                        rule_id="R2OCNT004",
+                        message=(
+                            f"{dirname}/{sf.name}:{line}:"
+                            " background process detected."
+                            " [NCO v11.0 IV.A.vi]"
+                        ),
+                        path=sf,
+                        line=line,
+                        fix_hint=(
+                            "Remove '&' — PBS Pro loses control"
+                            " of background processes."
+                        ),
+                    ))
             else:
                 results.append(LintResult(
                     status=Status.PASS,

@@ -22,6 +22,8 @@ _CATEGORIES = {
     "R2OMOD": "Modules",
     "R2OVER": "Versions",
     "R2OECF": "ecFlow",
+    "R2OCNT": "Content",
+    "R2OXRF": "Cross-reference",
 }
 
 _MAX_CHARS = 60_000

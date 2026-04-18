@@ -73,6 +73,25 @@ class TestJjobExscriptExists:
         assert check_jjob_exscript_exists(tmp_path, config) == []
 
 
+class TestLineNumbers:
+    def test_exscript_call_records_line(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        (tmp_path / "jobs").mkdir()
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "exfoo.sh").touch()
+        (tmp_path / "jobs" / "JMODEL").write_text(
+            "#!/bin/bash\n"
+            "set -x\n"
+            "$SCRIPTS/exfoo.sh\n"
+        )
+        results = check_jjob_exscript_exists(tmp_path, config)
+        assert len(results) == 1
+        assert results[0].line == 3
+        assert ":3" in results[0].message
+
+
 class TestNestedPaths:
     def test_nested_exscript_call_found(
         self, tmp_path: Path, config: Config

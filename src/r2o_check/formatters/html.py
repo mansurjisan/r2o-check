@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html as html_mod
 from collections import defaultdict
+from pathlib import Path
 
 from r2o_check import __version__
 from r2o_check.config import Config
@@ -73,9 +74,28 @@ document.addEventListener("DOMContentLoaded", function() {
 """
 
 
+def _location_text(r: LintResult, repo_path: Path | None) -> str:
+    if r.path is None:
+        return ""
+    p: str
+    if repo_path is not None:
+        try:
+            p = r.path.resolve().relative_to(
+                repo_path.resolve()
+            ).as_posix()
+        except ValueError:
+            p = str(r.path)
+    else:
+        p = str(r.path)
+    if r.line is not None:
+        return f"{p}:{r.line}"
+    return p
+
+
 def format_results_html(
     results: list[LintResult],
     config: Config,
+    repo_path: Path | None = None,
 ) -> str:
     """Format results as self-contained HTML."""
     counts = {s: 0 for s in Status}
@@ -93,6 +113,7 @@ def format_results_html(
             cls = _STATUS_CLASS[r.status]
             lbl = _STATUS_LABEL[r.status]
             msg = html_mod.escape(r.message)
+            loc = html_mod.escape(_location_text(r, repo_path))
             fix = (
                 f'<span class="fix">'
                 f"{html_mod.escape(r.fix_hint)}</span>"
@@ -103,6 +124,7 @@ def format_results_html(
                 f'<tr class="{cls}">'
                 f"<td>{lbl}</td>"
                 f"<td><code>{r.rule_id}</code></td>"
+                f"<td><code>{loc}</code></td>"
                 f"<td>{msg}</td>"
                 f"<td>{fix}</td>"
                 f"</tr>"
@@ -129,6 +151,7 @@ def format_results_html(
 <thead><tr>
   <th aria-sort="none">Status</th>\
 <th aria-sort="none">Rule</th>\
+<th aria-sort="none">Location</th>\
 <th aria-sort="none">Message</th>\
 <th aria-sort="none">Fix</th>
 </tr></thead>

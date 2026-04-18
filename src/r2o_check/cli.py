@@ -7,6 +7,10 @@ from pathlib import Path
 import click
 from rich.console import Console
 
+from r2o_check.baseline import (
+    DEFAULT_BASELINE_NAME,
+    Baseline,
+)
 from r2o_check.config import load_config
 from r2o_check.engine import LintRunner, Status
 from r2o_check.formatters.cli_table import format_results
@@ -50,17 +54,38 @@ def main() -> None:
     default=False,
     help="Include passing rules in markdown output.",
 )
+@click.option(
+    "--baseline",
+    "baseline_file",
+    type=click.Path(),
+    default=None,
+    help=(
+        "Path to a baseline JSON file. Findings present in"
+        " the baseline are suppressed. Use 'r2o-check"
+        " baseline' to generate one."
+    ),
+)
 def lint(
     path: str,
     fmt: str,
     output_file: str | None,
     markdown_include_passes: bool,
+    baseline_file: str | None,
 ) -> None:
     """Lint a repo for NCO Implementation Standards compliance."""
     repo_path = Path(path)
     config = load_config(repo_path)
     runner = LintRunner(repo_path, config)
     results = runner.run()
+
+    if baseline_file:
+        bl_path = Path(baseline_file)
+        if not bl_path.is_file():
+            raise click.ClickException(
+                f"Baseline file not found: {bl_path}"
+            )
+        baseline = Baseline.load(bl_path)
+        results = baseline.filter(results, repo_path)
 
     has_failures = any(
         r.status in (Status.FAIL, Status.ERROR)
@@ -77,10 +102,14 @@ def lint(
         )
         _write_output(text, output_file)
     elif fmt == "html":
-        text = format_results_html(results, config)
+        text = format_results_html(
+            results, config, repo_path=repo_path,
+        )
         _write_output(text, output_file)
     elif fmt == "sarif":
-        text = format_results_sarif(results, config)
+        text = format_results_sarif(
+            results, config, repo_path=repo_path,
+        )
         _write_output(text, output_file)
     else:
         if output_file:
@@ -99,6 +128,63 @@ def lint(
             format_results(results, console)
 
     raise SystemExit(1 if has_failures else 0)
+
+
+@main.command()
+@click.argument(
+    "path",
+    type=click.Path(
+        exists=True, file_okay=False, resolve_path=True
+    ),
+)
+@click.option(
+    "--output",
+    "-o",
+    "output_file",
+    type=click.Path(),
+    default=None,
+    help=(
+        "Baseline file path (default:"
+        f" ./{DEFAULT_BASELINE_NAME})."
+    ),
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Overwrite an existing baseline file.",
+)
+def baseline(
+    path: str, output_file: str | None, force: bool
+) -> None:
+    """Record current FAIL/WARN findings as a baseline.
+
+    Future ``lint --baseline <file>`` runs will suppress the
+    findings captured here so only *new* violations surface.
+    """
+    repo_path = Path(path)
+    config = load_config(repo_path)
+    runner = LintRunner(repo_path, config)
+    results = runner.run()
+
+    out_path = (
+        Path(output_file) if output_file
+        else repo_path / DEFAULT_BASELINE_NAME
+    )
+    if out_path.exists() and not force:
+        raise click.ClickException(
+            f"{out_path} already exists; pass --force to"
+            " overwrite."
+        )
+
+    bl = Baseline.from_results(results, repo_path)
+    bl.save(out_path)
+
+    console = Console()
+    console.print(
+        f"[green]Baselined {len(bl.fingerprints)}"
+        f" findings[/green] to {out_path}"
+    )
 
 
 @main.command()
