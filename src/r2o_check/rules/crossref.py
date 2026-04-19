@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from r2o_check._shell import strip_shell_comments
 from r2o_check.config import Config
 from r2o_check.engine import (
     MODEL_REPO_TYPES,
@@ -158,9 +159,9 @@ def check_jjob_exscript_exists(
     for jf in sorted(jobs_dir.iterdir()):
         if not jf.is_file() or jf.name.startswith("."):
             continue
-        content = jf.read_text(
+        content = strip_shell_comments(jf.read_text(
             encoding="utf-8", errors="replace"
-        )
+        ))
         seen: dict[str, int] = {}
         for m in _EXSCRIPT_CALL.finditer(content):
             sp = m.group(1)
@@ -226,9 +227,9 @@ def check_ecf_references_jjob(
 
     results: list[LintResult] = []
     for ef in sorted(ecf_dir.rglob("*.ecf")):
-        content = ef.read_text(
+        content = strip_shell_comments(ef.read_text(
             encoding="utf-8", errors="replace"
-        )
+        ))
         seen: dict[str, int] = {}
         for m in jjob_call.finditer(content):
             jname = m.group(1)
@@ -286,9 +287,9 @@ def check_exscript_ush_exists(
     for sf in sorted(scripts_dir.rglob("ex*")):
         if not sf.is_file():
             continue
-        content = sf.read_text(
+        content = strip_shell_comments(sf.read_text(
             encoding="utf-8", errors="replace"
-        )
+        ))
         seen: dict[str, int] = {}
         for m in _USH_CALL.finditer(content):
             sp = m.group(1)
@@ -379,23 +380,28 @@ def check_orphan_scripts(
     ush_dir = repo_path / "ush"
     results: list[LintResult] = []
 
-    # Collect all text from J-jobs.
+    # Collect all text from J-jobs (comment-stripped so
+    # commented-out calls don't keep orphans alive).
     jjob_text = ""
     if jobs_dir.is_dir():
         for jf in jobs_dir.iterdir():
             if jf.is_file() and not jf.name.startswith("."):
-                jjob_text += jf.read_text(
-                    encoding="utf-8", errors="replace"
-                )
+                jjob_text += strip_shell_comments(
+                    jf.read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                ) + "\n"
 
     # Collect all text from ex-scripts.
     exscript_text = ""
     if scripts_dir.is_dir():
         for sf in scripts_dir.rglob("ex*"):
             if sf.is_file():
-                exscript_text += sf.read_text(
-                    encoding="utf-8", errors="replace"
-                )
+                exscript_text += strip_shell_comments(
+                    sf.read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                ) + "\n"
 
     jjob_ex_calls = _called_ex_set(jjob_text)
     exscript_ush_calls = _called_ush_set(exscript_text)

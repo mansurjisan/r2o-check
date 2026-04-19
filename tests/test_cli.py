@@ -335,3 +335,50 @@ def test_only_filter_runs_subset() -> None:
     data = json.loads(result.output)
     rule_ids = {r["rule_id"] for r in data["results"]}
     assert rule_ids == {"R2OSTR001"}
+
+
+def test_only_rejects_unknown_rule_id() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["lint", str(COMPLIANT), "--only", "R2ONOTREAL"],
+    )
+    assert result.exit_code != 0
+    assert "Unknown rule ID" in result.output
+
+
+def test_only_rejects_one_unknown_among_valid() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["lint", str(COMPLIANT),
+         "--only", "R2OSTR001,R2OTYPO999"],
+    )
+    assert result.exit_code != 0
+    assert "R2OTYPO999" in result.output
+
+
+def test_only_skips_baseline_stale_detection(
+    tmp_path: Path,
+) -> None:
+    """Subset run must not flag unrelated baseline entries as stale."""
+    import shutil
+    repo = tmp_path / "repo"
+    shutil.copytree(NONCOMPLIANT, repo)
+
+    runner = CliRunner()
+    runner.invoke(main, ["baseline", str(repo)])
+    bl_file = repo / ".r2o-check-baseline.json"
+
+    combined_result = runner.invoke(
+        main,
+        [
+            "lint", str(repo),
+            "--baseline", str(bl_file),
+            "--only", "R2OSTR001",
+        ],
+    )
+    combined = combined_result.output
+    if getattr(combined_result, "stderr_bytes", None):
+        combined += combined_result.stderr
+    assert "stale" not in combined

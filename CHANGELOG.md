@@ -61,6 +61,25 @@
 
 ### Fixed
 
+- **Cross-reference rules now strip shell comments**: R2OXRF002,
+  R2OXRF003, R2OXRF004, and R2OXRF005 previously treated
+  `# ${SCRIPTS}/exfoo.sh` as a real call — producing spurious
+  FAILs and, worse, rescuing orphan scripts whose only "caller"
+  was commented out. Parity with the environment/content rules.
+- **`--only` validates rule IDs**: an unknown rule ID now errors
+  out instead of exiting 0 with an empty result set. A typo in a
+  CI `--only` list no longer becomes a silent false green.
+- **Baseline fingerprint disambiguates same-location findings**:
+  fingerprint format bumped to `rule|relpath|line|detail`, where
+  `detail` is an 8-char SHA-1 of the distinguishing text
+  (message with any leading `file:line:` prefix stripped, so the
+  hash is stable when line numbers drift). A baselined
+  `R2OXRF002: 'exfoo.sh'` no longer hides a new
+  `R2OXRF002: 'exbar.sh'` on the same J-job line. `BASELINE_VERSION`
+  is now 2; v1 baselines raise with a regenerate hint.
+- **`--only` + `--baseline` stale detection**: stale-entry warnings
+  are skipped when `--only` is in effect, so subset runs do not
+  mis-report every non-selected baseline entry as stale.
 - **R2OCNT004 regex swallowed multiple lines**: the character class
   allowed newlines, so a file with several `cmd &` lines reported
   only one match spanning the whole remainder. Now anchored to a

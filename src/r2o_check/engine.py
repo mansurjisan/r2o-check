@@ -154,6 +154,20 @@ class LintRunner:
             importlib.import_module(module_name)
         self._rules = get_registered_rules()
 
+    def available_rule_ids(self) -> set[str]:
+        """Return the canonical rule IDs of every registered rule.
+
+        Useful for validating user-supplied rule lists (e.g.
+        ``--only``). Triggers rule discovery if it hasn't
+        happened yet.
+        """
+        if not self._rules:
+            self.discover_rules()
+        return {
+            _infer_rule_id(entry.func)
+            for entry in self._rules.values()
+        }
+
     def _applies(self, entry: RuleEntry) -> bool:
         """Check if a rule applies to the current repo type."""
         return self.config.repo_type in entry.applies_to

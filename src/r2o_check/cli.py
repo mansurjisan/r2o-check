@@ -104,6 +104,19 @@ def lint(
             rid.strip() for rid in only_rules.split(",")
             if rid.strip()
         ]
+        if not ids:
+            raise click.ClickException(
+                "--only requires at least one rule ID."
+            )
+        known = runner.available_rule_ids()
+        unknown = [rid for rid in ids if rid not in known]
+        if unknown:
+            raise click.ClickException(
+                "Unknown rule ID(s):"
+                f" {', '.join(unknown)}."
+                " Use 'r2o-check lint --format json' to see"
+                " which rule IDs apply to your repo."
+            )
         results = runner.run_rules(ids)
     else:
         results = runner.run()
@@ -115,16 +128,22 @@ def lint(
                 f"Baseline file not found: {bl_path}"
             )
         baseline = Baseline.load(bl_path)
-        stale = baseline.find_stale(results, repo_path)
-        if stale:
-            click.echo(
-                f"Warning: baseline has {len(stale)} stale"
-                " entr" + ("ies" if len(stale) > 1 else "y")
-                + " (finding no longer present)."
-                " Run 'r2o-check baseline --update"
-                f" {bl_path}' to refresh.",
-                err=True,
-            )
+        # Stale detection compares the baseline against a FULL
+        # lint run. With --only we only ran a subset, so every
+        # baseline entry outside that subset would look stale —
+        # a false signal. Skip it in that case.
+        if not only_rules:
+            stale = baseline.find_stale(results, repo_path)
+            if stale:
+                click.echo(
+                    f"Warning: baseline has {len(stale)}"
+                    " stale entr"
+                    + ("ies" if len(stale) > 1 else "y")
+                    + " (finding no longer present)."
+                    " Run 'r2o-check baseline --update"
+                    f" {bl_path}' to refresh.",
+                    err=True,
+                )
         results = baseline.filter(results, repo_path)
 
     failing_statuses = {Status.FAIL, Status.ERROR}

@@ -73,6 +73,66 @@ class TestJjobExscriptExists:
         assert check_jjob_exscript_exists(tmp_path, config) == []
 
 
+class TestCommentStripping:
+    def test_commented_exscript_call_ignored(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        (tmp_path / "jobs").mkdir()
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "jobs" / "JMODEL").write_text(
+            "#!/bin/bash\n"
+            "# $SCRIPTS/exmissing.sh\n"
+            "echo ok\n"
+        )
+        results = check_jjob_exscript_exists(tmp_path, config)
+        # The only call was commented — no FAIL should result.
+        assert results == []
+
+    def test_commented_ush_call_ignored(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (tmp_path / "ush").mkdir()
+        (scripts / "exmodel.sh").write_text(
+            "#!/bin/bash\n"
+            "# $USH/helper.sh\n"
+        )
+        results = check_exscript_ush_exists(tmp_path, config)
+        assert results == []
+
+    def test_orphan_not_rescued_by_commented_call(
+        self, tmp_path: Path, config: Config
+    ) -> None:
+        jobs = tmp_path / "jobs"
+        scripts = tmp_path / "scripts"
+        ush = tmp_path / "ush"
+        jobs.mkdir()
+        scripts.mkdir()
+        ush.mkdir()
+        # J-job has the call, but it's commented out.
+        (jobs / "JMODEL").write_text(
+            "#!/bin/bash\n"
+            "# $SCRIPTS/exorphan.sh\n"
+        )
+        (scripts / "exorphan.sh").touch()
+        (ush / "helper.sh").touch()
+        # An ex-script exists with a commented ush reference.
+        (scripts / "exmodel.sh").write_text(
+            "#!/bin/bash\n"
+            "# $USH/helper.sh\n"
+        )
+        results = check_orphan_scripts(tmp_path, config)
+        # Both 'helper.sh' and 'exorphan.sh' should be WARN
+        # orphans — their only callers are commented out.
+        warns = {
+            r.message for r in results
+            if r.status == Status.WARN
+        }
+        assert any("exorphan.sh" in m for m in warns)
+        assert any("helper.sh" in m for m in warns)
+
+
 class TestLineNumbers:
     def test_exscript_call_records_line(
         self, tmp_path: Path, config: Config
